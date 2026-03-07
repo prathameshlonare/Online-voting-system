@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vote Submission</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 50px;
+      }
+      .form-container {
+        width: 300px;
+        margin: 0 auto;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+      }
+      input[type="text"],
+      select {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      .message {
+        margin-top: 20px;
+        text-align: center;
+      }
+      .loading {
+        color: blue;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Vote for President</h1>
+
+    <div class="form-container">
+      <label for="student_id">Student ID:</label>
+      <input
+        type="text"
+        id="student_id"
+        placeholder="Enter your Student ID"
+        required
+      />
+
+      <label for="candidate_id">Select Candidate:</label>
+      <select id="candidate_id" required>
+        <option value="pres_001">Rahul Pawar (pres_001)</option>
+        <!-- You can add more candidates here -->
+      </select>
+
+      <button onclick="submitVote()">Submit Vote</button>
+
+      <div class="message" id="message"></div>
+    </div>
+
+    <script>
+      function submitVote() {
+        const student_id = document.getElementById("student_id").value;
+        const candidate_id = document.getElementById("candidate_id").value;
+        const messageDiv = document.getElementById("message");
+
+        if (!student_id || !candidate_id) {
+          messageDiv.textContent = "Please fill in all fields.";
+          messageDiv.style.color = "red";
+          return;
+        }
+
+        // Show loading message while request is being processed
+        messageDiv.textContent = "Submitting your vote...";
+        messageDiv.classList.add("loading");
+        messageDiv.style.color = "blue";
+
+        // API URL (change this if needed)
+        const apiUrl =
+          "https://727ngy544i.execute-api.us-east-1.amazonaws.com/prod/submitvote";
+
+        const data = {
+          student_id: student_id,
+          candidate_id: candidate_id,
+        };
+
+        fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+        })
+          .then((response) => {
+            if (!response.ok) {
+              // If the response is not OK (like 400 or 500), throw an error
+              throw new Error("Something went wrong. Please try again later.");
+            }
+            return response.json(); // Parse JSON if response is OK
+          })
+          .then((result) => {
+            messageDiv.classList.remove("loading"); // Remove loading class
+
+            if (result.message) {
+              messageDiv.textContent = result.message;
+              messageDiv.style.color = "green";
+              // Clear input fields after successful submission
+              document.getElementById("student_id").value = "";
+              document.getElementById("candidate_id").value = "";
+            } else if (result.error) {
+              messageDiv.textContent = result.error;
+              messageDiv.style.color = "red";
+            }
+          })
+          .catch((error) => {
+            messageDiv.classList.remove("loading"); // Remove loading class
+            messageDiv.textContent =
+              error.message || "An error occurred. Please try again.";
+            messageDiv.style.color = "red";
+          });
+      }
+    </script>
+  </body>
+</html>

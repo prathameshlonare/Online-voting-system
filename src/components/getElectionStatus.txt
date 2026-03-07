@@ -1,0 +1,119 @@
+# getElectionStatus Lambda
+import json
+import boto3
+import os
+import logging
+import requests
+from jose import jwk, jwt # jose imports
+from jose.utils import base64url_decode # jose imports
+from botocore.exceptions import ClientError # Boto3 errors
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+dynamodb = boto3.resource('dynamodb')
+CONFIG_TABLE_NAME = os.environ.get('CONFIG_TABLE_NAME', 'Config')
+# Cognito Env Vars for Token Validation
+USER_POOL_ID = os.environ.get('COGNITO_USER_POOL_ID')
+COGNITO_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+COGNITO_APP_CLIENT_ID = os.environ.get('COGNITO_APP_CLIENT_ID') # Admin App Client ID
+
+config_table = None
+try:
+    if CONFIG_TABLE_NAME:
+        config_table = dynamodb.Table(CONFIG_TABLE_NAME)
+except Exception as e:
+    logger.error(f"Error initializing Config table in getElectionStatus: {e}")
+
+# --- Cognito Public Keys (Global scope for caching) ---
+cognito_keys = None
+try:
+    if COGNITO_REGION and USER_POOL_ID:
+        keys_url = f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json'
+        logger.info(f"Fetching Cognito keys from: {keys_url}")
+        response = requests.get(keys_url, timeout=5)
+        response.raise_for_status()
+        cognito_keys = response.json()['keys']
+        logger.info(f"Successfully fetched {len(cognito_keys)} Cognito public keys for getElectionStatus.")
+    else:
+        logger.warning("COGNITO_REGION or COGNITO_USER_POOL_ID env var not set. Cannot fetch keys for getElectionStatus.")
+except Exception as e:
+    logger.error(f"Failed to fetch Cognito public keys for getElectionStatus: {e}", exc_info=True)
+# --- End Cognito Keys ---
+
+# --- Admin Token Validation Function ---
+def validate_admin_token(token_value):
+    if not cognito_keys:
+        logger.error("Cognito keys not loaded for admin token validation (getElectionStatus).")
+        raise ValueError("Admin token validation keys missing.")
+    
+    unverified_headers = jwt.get_unverified_headers(token_value)
+    kid = unverified_headers.get('kid')
+    if not kid: raise ValueError("Token kid missing.")
+    key_data = next((k for k in cognito_keys if k['kid'] == kid), None)
+    if not key_data: raise ValueError("Public key not found for token kid.")
+    public_key = jwk.construct(key_data)
+
+    claims = jwt.decode(
+        token_value,
+        public_key.to_pem().decode('utf-8'),
+        algorithms=[key_data.get('alg', 'RS256')],
+        issuer=f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}',
+        audience=COGNITO_APP_CLIENT_ID,
+        options={ "verify_signature": True, "verify_aud": True, "verify_iat": True,
+                  "verify_exp": True, "verify_nbf": True, "verify_iss": True,
+                  "require_exp": True, "leeway": 60 }
+    )
+    
+    user_groups = claims.get('cognito:groups', [])
+    if 'admin' not in user_groups:
+        logger.warning(f"User {claims.get('cognito:username')} not in admin group (getElectionStatus). Groups: {user_groups}")
+        raise ValueError("User not authorized as admin.")
+    
+    logger.info(f"Admin user {claims.get('cognito:username')} validated successfully (getElectionStatus).")
+    return claims
+# --- End Admin Token Validation Function ---
+
+def lambda_handler(event, context):
+    logger.info(f"Received event for getElectionStatus: {json.dumps(event, indent=2)}")
+
+    if not config_table:
+        logger.error("Config table not initialized in getElectionStatus handler.")
+        return {'statusCode': 503, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': 'Server configuration error.'})}
+    if not cognito_keys:
+        logger.error("Cognito keys not available in getElectionStatus handler.")
+        return {'statusCode': 503, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': 'Server auth configuration error.'})}
+
+    try:
+        # --- Admin Token Validation ---
+        headers = event.get('headers', {})
+        auth_header = headers.get('authorization', headers.get('Authorization'))
+        if not auth_header or not auth_header.lower().startswith('bearer '):
+            raise ValueError("Authorization header missing or malformed.")
+        token = auth_header.split(' ')[1]
+        validate_admin_token(token) # Raises error if not valid admin
+        # --- End Token Validation ---
+
+        response = config_table.get_item(Key={'config_key': 'electionStatus'})
+        status = 'NOT_STARTED' # Default status
+        if 'Item' in response and 'value' in response['Item']:
+            status = response['Item']['value']
+
+        logger.info(f"Current election status: {status}")
+        return {
+            'statusCode': 200,
+            'headers': {'Access-Control-Allow-Origin': '*','Access-Control-Allow-Headers': 'Content-Type,Authorization', 'Access-Control-Allow-Methods': 'OPTIONS,GET,POST'},
+            'body': json.dumps({'status': status})
+        }
+    except ValueError as ve: # From validate_admin_token or header check
+        logger.error(f"Auth Value Error in getElectionStatus: {ve}")
+        return {'statusCode': 401, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': f'Unauthorized: {str(ve)}'})}
+    except (jwt.ExpiredSignatureError, jwt.JWTClaimsError, jwt.JWTError) as jwt_e:
+        logger.error(f"JWT Error in getElectionStatus: {jwt_e}")
+        return {'statusCode': 401, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': f'Unauthorized: Token validation failed - {str(jwt_e)}'})}
+    except ClientError as ce:
+        logger.error(f"DynamoDB ClientError in getElectionStatus: {ce.response['Error']['Message']}", exc_info=True)
+        return {'statusCode': 500, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': f"Database error: {ce.response['Error']['Message']}"})}
+    except Exception as e:
+        logger.error(f"Unexpected error in getElectionStatus: {e}", exc_info=True)
+        return {'statusCode': 500, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': json.dumps({'error': f'Failed to get status: {str(e)}'})}
