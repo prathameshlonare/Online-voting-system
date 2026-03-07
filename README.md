@@ -200,7 +200,7 @@ To connect this demo to a real AWS backend:
        }]
      },
      Storage: {
-       AWSS3: {
+       AWS-S3: {
          bucket: 'your-bucket-name',
          region: 'us-east-1'
        }
@@ -243,3 +243,4 @@ This project is available for educational purposes and as a portfolio demonstrat
 <p align="center">
   Made with ❤️ by RCERT Students
 </p>
+
