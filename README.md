@@ -239,7 +239,9 @@ This project is available for educational purposes and as a portfolio demonstrat
 - **Open Source Community** - For the amazing tools and libraries
 
 ---
-
+<p align="center">
+  prathameshlonare9@gmail.com,swapnilkumbhare706@gmail.com,mohaktalodhikar@gmail.com,suyogmadavi12@gmail.com
+</p>
 <p align="center">
   Made with ❤️ by RCERT Students
 </p>
