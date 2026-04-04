@@ -113,7 +113,7 @@ const VoteForm = ({ studentId, apiName }) => {
 
 
   // 3. Check Eligibility & Vote Status (if election is RUNNING)
-  const fetchAllRawCandidates = async () => {
+  const fetchAllRawCandidates = React.useCallback(async () => {
     if (!currentApiName) { setCandidatesError("API configuration missing."); return; }
     setCandidatesLoading(true); setCandidatesError(null);
     try {
@@ -128,7 +128,7 @@ const VoteForm = ({ studentId, apiName }) => {
       } else { setCandidatesError(`Error fetching candidates: ${error.response?.data?.error || error.message}`); }
       setAllCandidates([]);
     } finally { setCandidatesLoading(false); }
-  };
+  }, [currentApiName]);
 
   useEffect(() => {
     const checkEligibilityAndVoteStatus = async () => {
@@ -163,7 +163,7 @@ const VoteForm = ({ studentId, apiName }) => {
     } else if (!electionStatusLoading && electionSystemStatus !== 'RUNNING') {
       setEligibilityState(prev => ({ ...prev, loading: false, checked: true, isEligible: false, reason: `Election is currently ${electionSystemStatus?.toLowerCase().replace(/_/g, ' ')}.` }));
     }
-  }, [electionSystemStatus, electionStatusLoading, studentId, currentApiName]);
+  }, [electionSystemStatus, electionStatusLoading, studentId, currentApiName, fetchAllRawCandidates]);
 
 
   // --- Helper Functions ---

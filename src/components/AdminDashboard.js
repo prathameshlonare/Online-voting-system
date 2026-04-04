@@ -170,7 +170,7 @@ const AdminDashboard = ({ apiName }) => {
   }, []);
 
   // Fetch election status
-  const fetchElectionStatus = async () => {
+  const fetchElectionStatus = React.useCallback(async () => {
     if (!currentApiName) {
       setStatusError("API Name not configured.");
       setElectionStatus("CONFIG_ERROR");
@@ -179,7 +179,7 @@ const AdminDashboard = ({ apiName }) => {
     }
     console.log("AdminDashboard: Attempting to fetch /election/status");
     setStatusLoading(true);
-    setStatusError(null); // Clear previous error
+    setStatusError(null);
     try {
       const response = await API.get(currentApiName, "/election/status", {});
       console.log("AdminDashboard: /election/status response:", response);
@@ -201,7 +201,7 @@ const AdminDashboard = ({ apiName }) => {
     } finally {
       setStatusLoading(false);
     }
-  };
+  }, [currentApiName]);
   
   // Fetch admin details and initial election status on mount
   useEffect(() => {
@@ -226,7 +226,7 @@ const AdminDashboard = ({ apiName }) => {
       setElectionStatus("CONFIG_ERROR");
       setStatusLoading(false);
     }
-  }, [currentApiName]);
+  }, [currentApiName, fetchElectionStatus]);
 
 
   // Handlers

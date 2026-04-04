@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# settings
+/.vscode
+
 # dependencies
 /node_modules
 /.pnp
@@ -10,6 +13,10 @@
 
 # production
 /build
+
+# agents
+/.agents
+skills-lock.json
 
 # misc
 .DS_Store

@@ -11,9 +11,11 @@ export const API = mockApi;
 export const Storage = mockStorage;
 export const Hub = mockHub;
 
-export default {
+const mockServices = {
   Auth,
   API,
   Storage,
   Hub
 };
+
+export default mockServices;
