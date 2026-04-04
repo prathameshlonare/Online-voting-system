@@ -1,43 +1,92 @@
 // src/components/VoteForm.js
-import React, { useState, useEffect, useMemo } from "react";
-import { Auth, API } from "../mocks"; // Using mock AWS services
-import {
-  Typography, Box, Button, Paper, CircularProgress, Alert,
-  FormControl, InputLabel, Select, MenuItem, FormHelperText, Divider,
-  Container, Fade, ListItemText, AlertTitle,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
-} from "@mui/material";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Auth, API } from "../mocks";
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Divider from '@mui/material/Divider';
+import Container from '@mui/material/Container';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
 import LogoutIcon from '@mui/icons-material/Logout';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Required for Results Display
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import CandidateCard from './CandidateCard';
+import VoteProgressStepper from './VoteProgressStepper';
+import ConfettiCelebration from './ConfettiCelebration';
+import AnimatedResults from './AnimatedResults';
+import { CandidateSkeleton, ResultsSkeleton } from './SkeletonLoaders';
+
+const MessageDisplay = ({ title, message, severity = "info", showLogout = true, icon, onLogout }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4 }}
+  >
+    <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, textAlign: 'center', width: '100%', maxWidth: '600px', mx: 'auto', borderRadius: 3, boxSizing: 'border-box' }}>
+      {icon && <Box sx={{ fontSize: { xs: '2.5rem', sm: '3rem' }, color: `${severity}.main`, mb: 1.5 }}>{icon}</Box>}
+      <Typography variant="h5" component="h1" gutterBottom sx={{ fontWeight: 700, color: severity === 'error' ? 'error.main' : (severity === 'warning' ? 'warning.main' : 'primary.main'), wordBreak: 'break-word', fontSize: { xs: '1.3rem', sm: '1.75rem' } }}>
+        {title}
+      </Typography>
+      <Alert severity={severity} sx={{ textAlign: 'left', mb: 3, wordBreak: 'break-word', fontSize: { xs: '0.9rem', sm: '1rem' } }} icon={false}>
+        {message}
+      </Alert>
+      {showLogout && (
+        <Button variant="contained" color="secondary" onClick={onLogout} startIcon={<LogoutIcon />}>
+          Logout
+        </Button>
+      )}
+    </Paper>
+  </motion.div>
+);
 
 const VoteForm = ({ studentId, apiName }) => {
-  // States
   const [eligibilityState, setEligibilityState] = useState({ loading: true, isEligible: null, error: null, checked: false, reason: null });
   const [allCandidates, setAllCandidates] = useState([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState(null);
-  const [selectedPresidentId, setSelectedPresidentId] = useState("");
-  const [selectedSecretaryId, setSelectedSecretaryId] = useState("");
+  const [selectedCandidates, setSelectedCandidates] = useState({});
   const [voteState, setVoteState] = useState({ loading: false, error: null, successMessage: null, hasVoted: false });
-  const [startAnimation, setStartAnimation] = useState(false);
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const [electionSystemStatus, setElectionSystemStatus] = useState('LOADING');
   const [electionStatusLoading, setElectionStatusLoading] = useState(true);
   const [electionStatusError, setElectionStatusError] = useState(null);
 
-  // Results viewing states - Required for displaying results
   const [viewingResultsData, setViewingResultsData] = useState(null);
   const [viewingResultsLoading, setViewingResultsLoading] = useState(false);
   const [viewingResultsError, setViewingResultsError] = useState(null);
 
   const currentApiName = apiName;
 
-  useEffect(() => { const timer = setTimeout(() => setStartAnimation(true), 100); return () => clearTimeout(timer); }, []);
+  const roles = useMemo(() => [...new Set(allCandidates.map(c => c.role))], [allCandidates]);
+  const candidatesByRole = useMemo(() => {
+    const map = {};
+    roles.forEach(role => {
+      map[role] = allCandidates.filter(c => c.role === role);
+    });
+    return map;
+  }, [allCandidates, roles]);
+
+  useEffect(() => {
+    const allSelected = roles.length > 0 && roles.every(role => selectedCandidates[role]);
+    const someSelected = Object.keys(selectedCandidates).length > 0;
+    if (allSelected) setCurrentStep(1);
+    else if (someSelected) setCurrentStep(0);
+    else if (voteState.hasVoted) setCurrentStep(3);
+    else setCurrentStep(0);
+  }, [selectedCandidates, roles, voteState.hasVoted]);
 
   // 1. Fetch Overall Election Status
   useEffect(() => {
@@ -45,26 +94,20 @@ const VoteForm = ({ studentId, apiName }) => {
       if (!currentApiName) { setElectionSystemStatus('CONFIG_ERROR'); setElectionStatusError("API configuration is missing."); setElectionStatusLoading(false); return; }
       setElectionStatusLoading(true); setElectionStatusError(null);
       try {
-        console.log("VoteForm: Attempting to fetch /election/status (Amplify Auth will handle token)");
         const response = await API.get(currentApiName, "/election/status", {});
-        console.log("VoteForm: /election/status response:", response);
         if (response && response.status) {
           setElectionSystemStatus(response.status);
         } else {
-          setElectionSystemStatus('UNKNOWN_STATUS'); setElectionStatusError("Could not retrieve election status properly.");
+          setElectionSystemStatus('UNKNOWN_STATUS');
+          setElectionStatusError("Could not retrieve election status properly.");
         }
       } catch (error) {
-        console.warn("VoteForm: Error fetching /election/status:", error);
-        let specificErrorMsg;
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-          specificErrorMsg = "Not authorized to view current election details or the election is not accessible to you.";
           setElectionSystemStatus('ACCESS_DENIED_STATUS');
           setElectionStatusError(null);
-          console.info("VoteForm: Could not fetch global election status (likely unauthorized). Assuming election might be running.");
         } else {
           const backendError = error.response?.data?.error || error.message || "Network or server error.";
-          specificErrorMsg = `Error fetching status: ${backendError}`;
-          setElectionStatusError(specificErrorMsg);
+          setElectionStatusError(`Error fetching status: ${backendError}`);
           setElectionSystemStatus('STATUS_FETCH_ERROR');
         }
       } finally {
@@ -75,54 +118,46 @@ const VoteForm = ({ studentId, apiName }) => {
     else { setElectionSystemStatus('CONFIG_ERROR'); setElectionStatusError("API Name prop is missing."); setElectionStatusLoading(false); }
   }, [currentApiName]);
 
-
-  // 2. Fetch Declared Results if applicable - This function is NEEDED for RESULTS_DECLARED status
+  // 2. Fetch Declared Results
   useEffect(() => {
     const fetchDeclaredResults = async () => {
       if (!currentApiName) { setViewingResultsError("API configuration missing for results."); return; }
       setViewingResultsLoading(true); setViewingResultsError(null); setViewingResultsData(null);
       try {
-        console.log("VoteForm: Fetching /results (Amplify Auth will handle token)");
         const response = await API.get(currentApiName, "/results", {});
-
         if (response && typeof response === 'object' && Object.keys(response).length > 0) {
-          setViewingResultsData(response); // Direct set, formatting Lambda madhe zali aahe
+          setViewingResultsData(response);
         } else {
-          console.warn("Fetched results response is empty or not an object:", response);
           setViewingResultsData({});
           setViewingResultsError("No results data available or received unexpected format.");
         }
       } catch (error) {
-        console.error("VoteForm: Error fetching /results:", error);
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
           setViewingResultsError("Unauthorized: You do not have permission to view these results.");
         } else {
           const backendError = error.response?.data?.error || error.response?.data?.message || "Could not load results.";
           setViewingResultsError(`Error loading results: ${backendError}`);
         }
-        setViewingResultsData(null); // Clear data on error
+        setViewingResultsData(null);
       } finally {
         setViewingResultsLoading(false);
       }
     };
 
     if (electionSystemStatus === 'RESULTS_DECLARED' && !electionStatusLoading) {
-      fetchDeclaredResults(); // >>> CALL THIS FUNCTION WHEN STATUS IS RESULTS_DECLARED <<<
+      fetchDeclaredResults();
     }
   }, [electionSystemStatus, electionStatusLoading, currentApiName]);
 
-
-  // 3. Check Eligibility & Vote Status (if election is RUNNING)
+  // 3. Check Eligibility & Fetch Candidates
   const fetchAllRawCandidates = React.useCallback(async () => {
     if (!currentApiName) { setCandidatesError("API configuration missing."); return; }
     setCandidatesLoading(true); setCandidatesError(null);
     try {
-      console.log("VoteForm: Fetching /candidates (Amplify Auth will handle token)");
       const response = await API.get(currentApiName, "/candidates", {});
       if (Array.isArray(response)) { setAllCandidates(response); }
       else { setAllCandidates([]); setCandidatesError("Received unexpected format for candidates."); }
     } catch (error) {
-      console.error("VoteForm: Error fetching /candidates:", error);
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
         setCandidatesError("Unauthorized: You do not have permission to view candidates.");
       } else { setCandidatesError(`Error fetching candidates: ${error.response?.data?.error || error.message}`); }
@@ -137,18 +172,16 @@ const VoteForm = ({ studentId, apiName }) => {
       }
       setEligibilityState(prev => ({ ...prev, loading: true, error: null, reason: null, checked: false }));
       try {
-        console.log("VoteForm: Fetching /eligibility (Amplify Auth will handle token)");
         const eligResponse = await API.get(currentApiName, "/eligibility", {
           queryStringParameters: { student_id: studentId },
         });
         if (eligResponse && typeof eligResponse.isEligible === 'boolean') {
           setEligibilityState({ loading: false, isEligible: eligResponse.isEligible, error: null, checked: true, reason: eligResponse.reason || (eligResponse.isEligible ? null : "As per records, you are not eligible.") });
           if (eligResponse.isEligible) {
-            fetchAllRawCandidates(); // Fetch candidates only if eligible
+            fetchAllRawCandidates();
           }
         } else { setEligibilityState({ loading: false, isEligible: false, error: "Could not determine eligibility status.", checked: true, reason: "Eligibility check response was unclear." }); }
       } catch (error) {
-        console.error("VoteForm: Error fetching /eligibility:", error);
         const backendError = error.response?.data?.message || error.response?.data?.error;
         if (error.response && (error.response.status === 401 || error.response.status === 403)) {
           setEligibilityState({ loading: false, isEligible: false, error: "Unauthorized to check eligibility.", checked: true, reason: "Permission denied for eligibility check." });
@@ -165,135 +198,122 @@ const VoteForm = ({ studentId, apiName }) => {
     }
   }, [electionSystemStatus, electionStatusLoading, studentId, currentApiName, fetchAllRawCandidates]);
 
+  const handleLogout = useCallback(async () => {
+    setVoteState(prev => ({ ...prev, loading: true }));
+    try { await Auth.signOut(); }
+    catch (error) { setVoteState(prev => ({ ...prev, loading: false, error: "Error signing out." })); }
+  }, []);
 
-  // --- Helper Functions ---
-  const presidentCandidates = useMemo(() => allCandidates.filter(c => c.role === 'President'), [allCandidates]);
-  const secretaryCandidates = useMemo(() => allCandidates.filter(c => c.role === 'Secretary'), [allCandidates]);
-  const handleInitiateVoteSubmit = () => { if (!selectedPresidentId || !selectedSecretaryId) { setVoteState(prev => ({ ...prev, error: "Please select a candidate for both President AND Secretary." })); return; } setVoteState(prev => ({ ...prev, error: null })); setOpenReviewDialog(true); };
+  const handleSelectCandidate = useCallback((role, candidateId) => {
+    setSelectedCandidates(prev => ({ ...prev, [role]: candidateId }));
+  }, []);
 
-  const handleConfirmVoteSubmit = async () => {
+  const handleInitiateVoteSubmit = useCallback(() => {
+    const missingRoles = roles.filter(role => !selectedCandidates[role]);
+    if (missingRoles.length > 0) {
+      setVoteState(prev => ({ ...prev, error: `Please select a candidate for: ${missingRoles.join(', ')}.` }));
+      return;
+    }
+    setVoteState(prev => ({ ...prev, error: null }));
+    setCurrentStep(2);
+    setOpenReviewDialog(true);
+  }, [roles, selectedCandidates]);
+
+  const handleConfirmVoteSubmit = useCallback(async () => {
     setOpenReviewDialog(false);
     if (!currentApiName) { setVoteState(prev => ({ ...prev, error: "API configuration missing for voting." })); return; }
     setVoteState(prev => ({ ...prev, loading: true, error: null, successMessage: null }));
+
+    const voteBody = { student_id: studentId };
+    roles.forEach(role => {
+      voteBody[`${role.toLowerCase()}_candidate_id`] = selectedCandidates[role];
+    });
+
     try {
-      const response = await API.post(currentApiName, "/vote", {
-        body: {
-          student_id: studentId,
-          president_candidate_id: selectedPresidentId,
-          secretary_candidate_id: selectedSecretaryId,
-        },
-      });
+      const response = await API.post(currentApiName, "/vote", { body: voteBody });
       if (response && (response.message || response.success)) {
         setVoteState(prev => ({ ...prev, loading: false, successMessage: response.message || "Votes submitted successfully! Thank you for participating.", error: null, hasVoted: true }));
-        setSelectedPresidentId("");
-        setSelectedSecretaryId("");
+        setSelectedCandidates({});
+        setCurrentStep(3);
       } else {
         setVoteState(prev => ({ ...prev, loading: false, error: "Votes submitted, but confirmation was unclear. Please contact support.", successMessage: null }));
       }
     } catch (error) {
       const responseData = error.response?.data;
       const statusCode = error.response?.status;
-      let displayError = "An unexpected error occurred while submitting your vote. Please try again or contact support.";
+      let displayError = "An unexpected error occurred while submitting your vote.";
       if (responseData) {
         const backendErrorMessage = responseData.error || responseData.message || (typeof responseData === 'string' ? responseData : 'Unknown server error');
         if (statusCode === 409) { displayError = backendErrorMessage || "It appears you have already voted in this election."; setVoteState(prev => ({ ...prev, loading: false, error: displayError, successMessage: null, hasVoted: true })); return; }
         if (statusCode === 401 || statusCode === 403) { displayError = "Unauthorized: You do not have permission to submit this vote."; }
         else if (statusCode >= 400 && statusCode < 500) { displayError = `Submission failed: ${backendErrorMessage}`; }
         else { displayError = `Server error: ${backendErrorMessage}. Please try again later.`; }
-      } else { displayError = `Network error: ${error.message || 'Could not reach server'}. Please check your connection and try again.`; }
+      } else { displayError = `Network error: ${error.message || 'Could not reach server'}.`; }
       setVoteState(prev => ({ loading: false, error: displayError, successMessage: null }));
     }
+  }, [currentApiName, studentId, selectedCandidates, roles]);
+
+  const getCandidateNameById = useCallback((id, role) => {
+    const list = candidatesByRole[role] || [];
+    const candidate = list.find(c => c.candidate_id === id);
+    return candidate ? candidate.name : 'N/A';
+  }, [candidatesByRole]);
+
+  const roleColors = {
+    President: { main: '#1565C0', light: '#E3F2FD', dark: '#0D47A1' },
+    Secretary: { main: '#C2185B', light: '#FCE4EC', dark: '#880E4F' },
+    Treasurer: { main: '#2E7D32', light: '#E8F5E9', dark: '#1B5E20' },
+    VicePresident: { main: '#ED6C02', light: '#FFF3E0', dark: '#E65100' },
   };
 
-  const handleLogout = async () => { setVoteState(prev => ({ ...prev, loading: true })); try { await Auth.signOut(); } catch (error) { setVoteState(prev => ({ ...prev, loading: false, error: "Error signing out." })); } };
-  const getCandidateNameById = (id, role) => {
-    const candidatesList = role === 'President' ? presidentCandidates : secretaryCandidates;
-    const candidate = candidatesList.find(c => c.candidate_id === id);
-    return candidate ? candidate.name : 'N/A';
+  const getRoleColor = (role) => {
+    if (roleColors[role]) return roleColors[role];
+    const hash = role.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const hue = hash % 360;
+    return { main: `hsl(${hue}, 60%, 45%)`, light: `hsl(${hue}, 60%, 92%)`, dark: `hsl(${hue}, 60%, 30%)` };
   };
-  const MessageDisplay = ({ title, message, severity = "info", showLogout = true, icon }) => (<Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, textAlign: 'center', width: '100%', maxWidth: '600px', mx: 'auto', borderRadius: '12px', boxShadow: '0px 8px 24px rgba(0,0,0,0.12)', boxSizing: 'border-box' }}> {icon && <Box sx={{ fontSize: { xs: '2.5rem', sm: '3rem' }, color: `${severity}.main`, mb: 1.5 }}>{icon}</Box>} <Typography variant="h5" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: severity === 'error' ? 'error.main' : (severity === 'warning' ? 'warning.main' : 'primary.main'), wordBreak: 'break-word', fontSize: { xs: '1.3rem', sm: '1.75rem' } }}> {title} </Typography> <Alert severity={severity} sx={{ textAlign: 'left', mb: 3, wordBreak: 'break-word', fontSize: { xs: '0.9rem', sm: '1rem' } }} icon={false}> {message} </Alert> {showLogout && (<Button variant="contained" color="secondary" onClick={handleLogout} sx={{ textTransform: 'none', fontSize: '1rem' }} startIcon={<LogoutIcon />}> Logout </Button>)} </Paper>);
 
   // --- Main Render Logic ---
   const renderMainContent = () => {
-    // Loading and Error states for overall status
-    if (electionStatusLoading && electionSystemStatus === 'LOADING') { return <Box sx={{ p: 3, textAlign: 'center' }}> <CircularProgress /> <Typography sx={{ mt: 2 }}>Loading Election Details...</Typography> </Box>; }
-    if (electionStatusError || ['CONFIG_ERROR', 'STATUS_FETCH_ERROR', 'UNKNOWN_STATUS', 'ACCESS_DENIED_STATUS'].includes(electionSystemStatus)) { return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Election Information Error" message={electionStatusError || "Could not load election details at this time. Please try again later or contact support."} severity="error" /> </Box>; }
+    if (electionStatusLoading && electionSystemStatus === 'LOADING') {
+      return <Box sx={{ p: 3, textAlign: 'center' }}> <CircularProgress /> <Typography sx={{ mt: 2 }}>Loading Election Details...</Typography> </Box>;
+    }
+    if (electionStatusError || ['CONFIG_ERROR', 'STATUS_FETCH_ERROR', 'UNKNOWN_STATUS', 'ACCESS_DENIED_STATUS'].includes(electionSystemStatus)) {
+      return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+        <MessageDisplay title="Election Information Error" message={electionStatusError || "Could not load election details at this time."} severity="error" onLogout={handleLogout} />
+      </Box>;
+    }
 
-    // >>> C. Results Declared - SHOW RESULTS <<<
+    // RESULTS_DECLARED
     if (electionSystemStatus === 'RESULTS_DECLARED') {
       return (
         <Container component="main" maxWidth="md" disableGutters sx={{ width: '100%' }}>
-          <Paper elevation={4} sx={{ p: { xs: 2, sm: 3, md: 4 }, width: '100%', borderRadius: '16px', boxShadow: '0px 10px 30px rgba(0,0,0,0.1)' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}> <EmojiEventsIcon color="primary" sx={{ fontSize: { xs: '2.2rem', sm: '2.8rem' }, mr: 1.5 }} /> <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', fontSize: { xs: '1.6rem', sm: '2.2rem' }, color: 'primary.main' }}> Election Results </Typography> </Box>
-              <Button variant="outlined" color="secondary" onClick={handleLogout} startIcon={<LogoutIcon />} sx={{ textTransform: 'none' }}>Logout</Button>
+          <Paper elevation={4} sx={{ p: { xs: 2, sm: 3, md: 4 }, width: '100%', borderRadius: 3, boxShadow: '0px 10px 30px rgba(0,0,0,0.1)' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 10 }}>
+                  <EmojiEventsIcon color="primary" sx={{ fontSize: { xs: '2.2rem', sm: '2.8rem' }, mr: 1.5 }} />
+                </motion.div>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 800, fontSize: { xs: '1.6rem', sm: '2.2rem' }, color: 'primary.main', fontFamily: "'Playfair Display', serif" }}>
+                  Election Results
+                </Typography>
+              </Box>
+              <Button variant="outlined" color="secondary" onClick={handleLogout} startIcon={<LogoutIcon />}>Logout</Button>
             </Box>
             <Divider sx={{ my: 2.5 }} />
 
-            {/* Message for all users when results are out */}
             <Alert severity="info" sx={{ mb: 3 }}>
               <AlertTitle sx={{ fontWeight: 'medium' }}>Voting Period Concluded</AlertTitle>
-              The voting period for this election has finished. The official results are displayed below.
+              The voting period has finished. The official results are displayed below.
             </Alert>
 
-            {/* >>> Results Display Logic - ADDED BACK <<< */}
-            {viewingResultsLoading && <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', my: 4, minHeight: '200px' }}><CircularProgress size={40} sx={{ mb: 2 }} /><Typography variant="h6">Loading Results...</Typography></Box>}
+            {viewingResultsLoading && <ResultsSkeleton />}
             {viewingResultsError && <Alert severity="error" sx={{ mt: 2 }}><AlertTitle>Error Loading Results</AlertTitle>{viewingResultsError}</Alert>}
 
-            {/* Results Display Logic - Use viewingResultsData */}
             {viewingResultsData && !viewingResultsLoading && !viewingResultsError && (
               <Box>
-                {/* Check if viewingResultsData is structured as expected (e.g., { President: [...], Secretary: [...] }) */}
                 {Object.entries(viewingResultsData).length > 0 ? (
-                  <>
-                    {/* Display President Winner */}
-                    {viewingResultsData.President && viewingResultsData.President.length > 0 && (
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ textTransform: 'capitalize', borderBottom: '2px solid', borderColor: 'primary.light', pb: 1, color: 'primary.dark', fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>President Winner</Typography>
-                        {/* Get the first candidate (winner) */}
-                        {viewingResultsData.President[0] && (
-                          <Paper elevation={4} sx={{ display: 'flex', alignItems: 'center', p: 1.5, borderRadius: '10px', bgcolor: 'success.lighter', borderLeft: `6px solid success.main`, transition: 'all 0.2s ease-in-out' }}>
-                            <EmojiEventsIcon sx={{ color: 'gold', fontSize: '2em', mr: 2 }} />
-                            <Box>
-                              <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', sm: '1.15rem' }, color: 'success.darker' }}>
-                                {viewingResultsData.President[0].name || viewingResultsData.President[0].candidate_id}
-                              </Typography>
-                            </Box>
-                          </Paper>
-                        )}
-                        {!viewingResultsData.President[0] && (
-                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 1 }}>No winner found for President.</Typography>
-                        )}
-                      </Box>
-                    )}
-
-                    {/* Display Secretary Winner */}
-                    {viewingResultsData.Secretary && viewingResultsData.Secretary.length > 0 && (
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="h5" component="h2" gutterBottom sx={{ textTransform: 'capitalize', borderBottom: '2px solid', borderColor: 'primary.light', pb: 1, color: 'primary.dark', fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Secretary Winner</Typography>
-                        {viewingResultsData.Secretary[0] && (
-                          <Paper elevation={4} sx={{ display: 'flex', alignItems: 'center', p: 1.5, borderRadius: '10px', bgcolor: 'success.lighter', borderLeft: `6px solid success.main`, transition: 'all 0.2s ease-in-out' }}>
-                            <EmojiEventsIcon sx={{ color: 'gold', fontSize: '2em', mr: 2 }} />
-                            <Box>
-                              <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', sm: '1.15rem' }, color: 'success.darker' }}>
-                                {viewingResultsData.Secretary[0].name || viewingResultsData.Secretary[0].candidate_id}
-                              </Typography>
-                            </Box>
-                          </Paper>
-                        )}
-                        {/* Optional: Message if no winner found for the role */}
-                        {!viewingResultsData.Secretary[0] && (
-                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 1 }}>No winner found for Secretary.</Typography>
-                        )}
-                      </Box>
-                    )}
-
-                    {/* Optional: Message if no winners found for any position */}
-                    {(!viewingResultsData.President || viewingResultsData.President.length === 0) && (!viewingResultsData.Secretary || viewingResultsData.Secretary.length === 0) && (
-                      <Alert severity="info" sx={{ mt: 2 }}>No winners declared for any position yet.</Alert>
-                    )}
-
-                  </>
+                  <AnimatedResults results={viewingResultsData} />
                 ) : (
                   <Alert severity="info" sx={{ mt: 2 }}>No voting results data is currently published.</Alert>
                 )}
@@ -306,36 +326,208 @@ const VoteForm = ({ studentId, apiName }) => {
 
     if (electionSystemStatus === 'RUNNING') {
       if (eligibilityState.loading && !eligibilityState.checked) {
-        return (<Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 160px)', p: 3 }}> <CircularProgress size={50} /> <Typography variant="h6" sx={{ mt: 2.5, color: 'text.secondary' }}>Checking Your Voting Eligibility...</Typography> </Box>);
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 160px)', p: 3 }}>
+            <CircularProgress size={50} />
+            <Typography variant="h6" sx={{ mt: 2.5, color: 'text.secondary' }}>Checking Your Voting Eligibility...</Typography>
+          </Box>
+        );
       }
       if (eligibilityState.error && eligibilityState.checked) {
-        return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Eligibility Check Failed" message={eligibilityState.error} severity="error" /> </Box>;
+        return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+          <MessageDisplay title="Eligibility Check Failed" message={eligibilityState.error} severity="error" onLogout={handleLogout} />
+        </Box>;
       }
       if (!eligibilityState.isEligible && eligibilityState.checked) {
-        return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Voting Access Information" message={eligibilityState.reason || "You are currently unable to vote or access voting at this time."} severity="warning" /> </Box>;
+        return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+          <MessageDisplay title="Voting Access Information" message={eligibilityState.reason || "You are currently unable to vote."} severity="warning" onLogout={handleLogout} />
+        </Box>;
       }
       if (eligibilityState.isEligible && eligibilityState.checked) {
         return (
-          <Container component="main" maxWidth="md" disableGutters sx={{ width: '100%' }}> <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, width: '100%', maxWidth: '700px', mx: 'auto', borderRadius: '16px' }}> <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}> <Box sx={{ display: 'flex', alignItems: 'center' }}> <HowToVoteIcon color="primary" sx={{ fontSize: { xs: '1.8rem', sm: '2.2rem' }, mr: 1 }} /> <Typography variant="h5" component="h1" sx={{ fontWeight: 'bold', fontSize: { xs: '1.3rem', sm: '1.75rem' } }}> Cast Your Votes </Typography> </Box> <Button variant="outlined" color="secondary" onClick={handleLogout} size="small" disabled={voteState.loading} startIcon={<LogoutIcon />}> Logout </Button> </Box> <Divider sx={{ my: 2 }} /> {!voteState.hasVoted && !candidatesLoading && !candidatesError && (presidentCandidates.length > 0 || secretaryCandidates.length > 0) && (<Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />} sx={{ mb: 2, fontSize: { xs: '0.85rem', sm: '0.95rem' } }}> <AlertTitle sx={{ fontWeight: 'medium' }}>Voting Instructions</AlertTitle> Please select one candidate for each position and submit your vote. Review your selections carefully before submitting. </Alert>)} <Typography variant="body1" gutterBottom sx={{ mb: 2, textAlign: 'center' }}> Student ID: <strong>{studentId}</strong></Typography> {voteState.hasVoted && !voteState.loading && (<Alert severity={voteState.error ? "error" : "success"} iconMapping={{ success: <CheckCircleOutlineIcon fontSize="inherit" /> }}> <AlertTitle sx={{ fontWeight: 'bold' }}>{voteState.error ? "Vote Status" : "Vote Confirmed!"}</AlertTitle> {voteState.error || voteState.successMessage || "Your vote has been recorded."} </Alert>)} {candidatesLoading && !voteState.hasVoted && (<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', my: 3, color: 'text.secondary', minHeight: '150px' }}> <CircularProgress size={30} sx={{ mb: 1.5 }} /> <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}>Loading Candidates...</Typography> </Box>)} {candidatesError && !candidatesLoading && !voteState.hasVoted && (<Alert severity="error" sx={{ mt: 2 }}><AlertTitle>Error Loading Candidates</AlertTitle>{candidatesError}</Alert>)} {!voteState.hasVoted && !candidatesLoading && !candidatesError && ((presidentCandidates.length > 0 || secretaryCandidates.length > 0) ? (<form onSubmit={(e) => { e.preventDefault(); handleInitiateVoteSubmit(); }}> {presidentCandidates.length > 0 && <Paper elevation={0} sx={{ p: { xs: 1.5, sm: 2 }, mb: 2.5, borderRadius: '8px', border: '1px solid #e0e0e0', backgroundColor: 'action.hover' }}> <Typography variant="h6" gutterBottom sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', fontSize: { xs: '1.1rem', sm: '1.25rem' }, color: 'primary.dark' }}> <AccountCircleIcon sx={{ mr: { xs: 0.5, sm: 1 }, color: 'primary.dark' }} /> Select President </Typography> <FormControl fullWidth margin="dense" required error={!!voteState.error && !selectedPresidentId} variant="outlined"> <InputLabel id="president-select-label">President Candidate</InputLabel> <Select labelId="president-select-label" id="president-select" value={selectedPresidentId} onChange={(e) => { setSelectedPresidentId(e.target.value); setVoteState(prev => ({ ...prev, error: null })) }} label="President Candidate" renderValue={(selected) => selected ? getCandidateNameById(selected, 'President') : <em>-- Select President --</em>} > <MenuItem value="" disabled><em>-- Select President --</em></MenuItem> {presidentCandidates.map((c) => (c?.candidate_id && c?.name ? (<MenuItem key={`pres-${c.candidate_id}`} value={c.candidate_id}><ListItemText primary={c.name} secondary={`Party: ${c.party || 'N/A'}`} /></MenuItem>) : null))} </Select> {(presidentCandidates.length === 0 && !candidatesLoading) && <FormHelperText sx={{ color: 'warning.dark' }}>No candidates available for President.</FormHelperText>} </FormControl> </Paper>} {secretaryCandidates.length > 0 && <Paper elevation={0} sx={{ p: { xs: 1.5, sm: 2 }, mb: 2.5, borderRadius: '8px', border: '1px solid #e0e0e0', backgroundColor: 'action.hover' }}> <Typography variant="h6" gutterBottom sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', fontSize: { xs: '1.1rem', sm: '1.25rem' }, color: 'primary.dark' }}> <AccountCircleIcon sx={{ mr: { xs: 0.5, sm: 1 }, color: 'primary.dark' }} /> Select Secretary </Typography> <FormControl fullWidth margin="dense" required error={!!voteState.error && !selectedSecretaryId} variant="outlined"> <InputLabel id="secretary-select-label">Secretary Candidate</InputLabel> <Select labelId="secretary-select-label" id="secretary-select" value={selectedSecretaryId} onChange={(e) => { setSelectedSecretaryId(e.target.value); setVoteState(prev => ({ ...prev, error: null })) }} label="Secretary Candidate" renderValue={(selected) => selected ? getCandidateNameById(selected, 'Secretary') : <em>-- Select Secretary --</em>} > <MenuItem value="" disabled><em>-- Select Secretary --</em></MenuItem> {secretaryCandidates.map((c) => (c?.candidate_id && c?.name ? (<MenuItem key={`sec-${c.candidate_id}`} value={c.candidate_id}><ListItemText primary={c.name} secondary={`Party: ${c.party || 'N/A'}`} /></MenuItem>) : null))} </Select> {(secretaryCandidates.length === 0 && !candidatesLoading) && <FormHelperText sx={{ color: 'warning.dark' }}>No candidates available for Secretary.</FormHelperText>} </FormControl> </Paper>} {voteState.error && !voteState.hasVoted && (<Alert severity="error" sx={{ mt: 2 }}><AlertTitle>Error</AlertTitle>{voteState.error}</Alert>)} <Button type="submit" variant="contained" color="primary" fullWidth disabled={voteState.loading || candidatesLoading || !selectedPresidentId || !selectedSecretaryId} sx={{ mt: 3, py: 1.5, fontSize: '1.1rem', fontWeight: 'bold' }} startIcon={voteState.loading ? null : <HowToVoteIcon />} > {voteState.loading ? <CircularProgress size={24} color="inherit" /> : "Review & Submit Votes"} </Button> </form>) : (<Alert severity="warning" sx={{ mt: 2 }}>No candidates are currently available for voting.</Alert>))} <Dialog open={openReviewDialog} onClose={() => setOpenReviewDialog(false)} fullWidth maxWidth="xs"> <DialogTitle sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}> <Box sx={{ display: 'flex', alignItems: 'center' }}> <HowToVoteIcon sx={{ mr: 1 }} /> Review Selections </Box> </DialogTitle> <DialogContent dividers> <DialogContentText component="div" sx={{ mb: 1 }}>Confirm your choices:</DialogContentText> <Typography><strong>President:</strong> {getCandidateNameById(selectedPresidentId, 'President')}</Typography> <Typography><strong>Secretary:</strong> {getCandidateNameById(selectedSecretaryId, 'Secretary')}</Typography> <DialogContentText sx={{ mt: 1, fontSize: '0.8rem', color: 'text.secondary' }}>Once submitted, your vote cannot be changed.</DialogContentText> </DialogContent> <DialogActions sx={{ p: 1.5 }}> <Button onClick={() => setOpenReviewDialog(false)}>Edit</Button> <Button onClick={handleConfirmVoteSubmit} color="primary" variant="contained" autoFocus disabled={voteState.loading}>{voteState.loading ? <CircularProgress size={20} /> : "Submit Vote"}</Button> </DialogActions> </Dialog> </Paper> </Container>
+          <Container component="main" maxWidth="md" disableGutters sx={{ width: '100%' }}>
+            <Paper elevation={3} sx={{ p: { xs: 2, sm: 3, md: 4 }, width: '100%', maxWidth: '700px', mx: 'auto', borderRadius: 3 }}>
+              {/* Header */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <HowToVoteIcon color="primary" sx={{ fontSize: { xs: '1.8rem', sm: '2.2rem' }, mr: 1 }} />
+                  <Typography variant="h5" component="h1" sx={{ fontWeight: 700, fontSize: { xs: '1.3rem', sm: '1.75rem' } }}>
+                    Cast Your Votes
+                  </Typography>
+                </Box>
+                <Button variant="outlined" color="secondary" onClick={handleLogout} disabled={voteState.loading} startIcon={<LogoutIcon />}>Logout</Button>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Progress Stepper */}
+              {!voteState.hasVoted && <VoteProgressStepper currentStep={currentStep} />}
+
+              {/* Student ID */}
+              <Typography variant="body1" gutterBottom sx={{ mb: 3, textAlign: 'center', color: 'text.secondary' }}>
+                Student ID: <strong sx={{ color: 'text.primary' }}>{studentId}</strong>
+              </Typography>
+
+              {/* Success/Error */}
+              {voteState.hasVoted && !voteState.loading && (
+                <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+                  <Alert severity={voteState.error ? "error" : "success"} iconMapping={{ success: <CheckCircleOutlineIcon fontSize="inherit" /> }} sx={{ mb: 3 }}>
+                    <AlertTitle sx={{ fontWeight: 'bold' }}>{voteState.error ? "Vote Status" : "Vote Confirmed!"}</AlertTitle>
+                    {voteState.error || voteState.successMessage || "Your vote has been recorded."}
+                  </Alert>
+                </motion.div>
+              )}
+
+              {/* Candidates Loading */}
+              {candidatesLoading && !voteState.hasVoted && (
+                <Box sx={{ mb: 3 }}>
+                  {roles.map((role) => (
+                    <Box key={role} sx={{ mb: 3 }}>
+                      <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>{role} Candidates</Typography>
+                      <CandidateSkeleton count={2} />
+                    </Box>
+                  ))}
+                </Box>
+              )}
+
+              {/* Candidate Selection */}
+              {!voteState.hasVoted && !candidatesLoading && !candidatesError && roles.length > 0 && (
+                <Box>
+                  {roles.map((role) => {
+                    const roleCandidates = candidatesByRole[role] || [];
+                    const color = getRoleColor(role);
+                    if (roleCandidates.length === 0) return null;
+                    return (
+                      <Box key={role} sx={{ mb: 3 }}>
+                        <Typography variant="h6" sx={{ mb: 2, color: color.main, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color.main }} />
+                          {role}
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {roleCandidates.map((candidate) => (
+                            <CandidateCard
+                              key={candidate.candidate_id}
+                              candidate={candidate}
+                              role={role}
+                              isSelected={selectedCandidates[role] === candidate.candidate_id}
+                              onSelect={() => handleSelectCandidate(role, candidate.candidate_id)}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+
+                  {/* Submit Button */}
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      size="large"
+                      onClick={handleInitiateVoteSubmit}
+                      disabled={roles.some(role => !selectedCandidates[role])}
+                      sx={{
+                        mt: 2,
+                        py: 1.75,
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        borderRadius: 3,
+                        boxShadow: '0 4px 16px rgba(21, 101, 192, 0.3)',
+                        '&:hover': {
+                          boxShadow: '0 6px 24px rgba(21, 101, 192, 0.4)',
+                        },
+                      }}
+                    >
+                      Review & Submit Vote
+                    </Button>
+                  </motion.div>
+                </Box>
+              )}
+
+              {/* No candidates */}
+              {!voteState.hasVoted && !candidatesLoading && !candidatesError && roles.length === 0 && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <AlertTitle>No Candidates Registered</AlertTitle>
+                  No candidates have been registered for this election yet. Please check back later.
+                </Alert>
+              )}
+
+              {candidatesError && <Alert severity="error" sx={{ mt: 2 }}>{candidatesError}</Alert>}
+              {voteState.error && !voteState.hasVoted && <Alert severity="error" sx={{ mt: 2 }}>{voteState.error}</Alert>}
+            </Paper>
+
+            {/* Review Dialog */}
+            <Dialog open={openReviewDialog} onClose={() => { setOpenReviewDialog(false); setCurrentStep(1); }} maxWidth="sm" fullWidth>
+              <DialogTitle sx={{ fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>Review Your Vote</DialogTitle>
+              <DialogContent>
+                <DialogContentText sx={{ mb: 2 }}>
+                  Please confirm your selections below. This action cannot be undone.
+                </DialogContentText>
+                {roles.map((role) => {
+                  const color = getRoleColor(role);
+                  return (
+                    <Paper key={role} sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: `${color.main}08`, border: '1px solid', borderColor: `${color.main}20` }}>
+                      <Typography variant="body2" sx={{ color: color.main, fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{role}</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: color.dark }}>
+                        {getCandidateNameById(selectedCandidates[role], role)}
+                      </Typography>
+                    </Paper>
+                  );
+                })}
+              </DialogContent>
+              <DialogActions sx={{ p: 2 }}>
+                <Button onClick={() => { setOpenReviewDialog(false); setCurrentStep(1); }} variant="outlined">
+                  Go Back
+                </Button>
+                <Button onClick={handleConfirmVoteSubmit} variant="contained" color="primary" disabled={voteState.loading} autoFocus>
+                  {voteState.loading ? <CircularProgress size={24} color="inherit" /> : "Confirm & Submit"}
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            {/* Confetti on success */}
+            <ConfettiCelebration active={voteState.hasVoted && !!voteState.successMessage} duration={4000} />
+          </Container>
         );
       }
-      return (<Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 160px)', p: 3 }}> <CircularProgress size={40} /> <Typography sx={{ mt: 2 }}>Loading voting information...</Typography> </Box>);
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 160px)', p: 3 }}>
+          <CircularProgress size={40} />
+          <Typography sx={{ mt: 2 }}>Loading voting information...</Typography>
+        </Box>
+      );
     }
 
-    if (electionSystemStatus === 'NOT_STARTED') { return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Voting Not Started" message="The election voting period has not yet begun. Please check back later." severity="info" icon={<InfoOutlinedIcon />} /> </Box>; }
-    if (electionSystemStatus === 'STOPPED') { return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Voting Closed" message="The election period has ended. Results will be announced soon." severity="info" icon={<InfoOutlinedIcon />} /> </Box>; }
+    if (electionSystemStatus === 'NOT_STARTED') {
+      return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+        <MessageDisplay title="Voting Not Started" message="The election voting period has not yet begun. Please check back later." severity="info" icon={<InfoOutlinedIcon />} onLogout={handleLogout} />
+      </Box>;
+    }
+    if (electionSystemStatus === 'STOPPED') {
+      return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+        <MessageDisplay title="Voting Closed" message="The election period has ended. Results will be announced soon." severity="info" icon={<InfoOutlinedIcon />} onLogout={handleLogout} />
+      </Box>;
+    }
 
-    return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}> <MessageDisplay title="Election Status" message="Please wait or refresh the page for current election details." severity="info" showLogout={false} /> </Box>;
+    return <Box sx={{ p: 3, width: '100%', maxWidth: '600px', mx: 'auto' }}>
+      <MessageDisplay title="Election Status" message="Please wait or refresh the page for current election details." severity="info" showLogout={false} />
+    </Box>;
   };
 
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', bgcolor: 'grey.100', py: { xs: 2, sm: 3 }, px: { xs: 1, sm: 1.5 }, boxSizing: 'border-box' }}>
-      <Fade in={startAnimation} timeout={700}>
-        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', p: 1 }}>
+    <Box component="main" id="main-content" role="main" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', bgcolor: 'background.default', py: { xs: 2, sm: 3 }, px: { xs: 1, sm: 1.5 }, boxSizing: 'border-box' }}>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={electionSystemStatus}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.4 }}
+          style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+        >
           {renderMainContent()}
-        </Box>
-      </Fade>
+        </motion.div>
+      </AnimatePresence>
     </Box>
   );
 };

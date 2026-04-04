@@ -3,23 +3,19 @@ import React, { useState, useEffect } from "react";
 import { Auth } from "../mocks"; // Using mock AWS services
 import { useNavigate } from "react-router-dom";
 
-import {
-  TextField,
-  Button,
-  Typography,
-  Box,
-  Link,
-  CircularProgress,
-  Alert,
-  IconButton,
-  InputAdornment,
-  Container,
-  Fade,
-  useTheme,
-  Paper
-} from "@mui/material";
-
-// Icons
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import Container from '@mui/material/Container';
+import Fade from '@mui/material/Fade';
+import { useTheme } from '@mui/material/styles';
+import Paper from '@mui/material/Paper';
 import EmailIcon from '@mui/icons-material/Email';
 import LockIcon from '@mui/icons-material/Lock';
 import Visibility from '@mui/icons-material/Visibility';
@@ -402,9 +398,11 @@ const AuthForm = () => {
     >
       {/* Main form card container with animation */}
       <Fade in={startAnimation} timeout={700}>
-        <Container component="main" maxWidth="sm" disableGutters sx={{ boxSizing: 'border-box' }}>
+        <Container component="main" id="main-content" maxWidth="sm" disableGutters sx={{ boxSizing: 'border-box' }}>
           <Paper // Form card itself
             elevation={6}
+            role="form"
+            aria-label="Authentication form"
             sx={{
               width: '100%',
               display: 'flex',
@@ -423,7 +421,7 @@ const AuthForm = () => {
                 <Typography variant="h5" component="h1" gutterBottom align="center" sx={{ mb: 2.5, fontWeight: 'bold', color: theme.palette.text.primary }}>
                   Set New Password
                 </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
                   Your account requires a password change. Please set a new password.
                 </Typography>
                 <TextField
@@ -456,8 +454,8 @@ const AuthForm = () => {
                     endAdornment: (<InputAdornment position="end"> <IconButton onClick={() => setShowFcConfirmNewPass(!showFcConfirmNewPass)} edge="end" aria-label="toggle password visibility"> {showFcConfirmNewPass ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment>),
                   }}
                 />
-                {error && <Alert severity="error" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}
-                {success && <Alert severity="success" sx={{ mt: 2, width: '100%' }}>{success}</Alert>}
+                {error && <Alert severity="error" role="alert" sx={{ mt: 2, width: '100%' }}>{error}</Alert>}
+                {success && <Alert severity="success" role="status" sx={{ mt: 2, width: '100%' }}>{success}</Alert>}
                 <Button type="submit" variant="contained" color="primary" fullWidth sx={{ mt: 3, py: 1.5, textTransform: 'none', fontSize: '1rem', fontWeight: 'bold' }} disabled={loading}>
                   {loading ? <CircularProgress size={24} color="inherit" /> : "Set New Password"}
                 </Button>
@@ -477,7 +475,7 @@ const AuthForm = () => {
                   </Typography>
                   {forgotPasswordStep === "sendCode" ? (
                     <form onSubmit={handleForgotPasswordSendCode} style={{ width: '100%', boxSizing: 'border-box' }}>
-                      <Typography variant="body2" color="textSecondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
                         Enter your email to receive a verification code.
                       </Typography>
                       <TextField label="Email" type="email" name="forgotPasswordEmail"
@@ -493,7 +491,7 @@ const AuthForm = () => {
                     </form>
                   ) : (
                     <form onSubmit={handleForgotPasswordSubmit} style={{ width: '100%', boxSizing: 'border-box' }}>
-                      <Typography variant="body2" color="textSecondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom align="center" sx={{ mb: 2.5 }}>
                         Enter the code sent to <strong>{formData.email}</strong> and set a new password.
                       </Typography>
                       <TextField label="Verification Code" type="text" name="forgotPasswordCode"

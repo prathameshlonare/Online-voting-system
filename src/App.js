@@ -7,7 +7,10 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Auth, Hub } from "./mocks"; // Using mock AWS services
-import { Container, CircularProgress, Box, Typography } from "@mui/material";
+import Container from '@mui/material/Container';
+import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 import AuthForm from "./components/AuthForm";
 import VoteForm from "./components/VoteForm";

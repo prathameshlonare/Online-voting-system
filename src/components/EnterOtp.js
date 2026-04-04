@@ -1,7 +1,17 @@
 // src/components/EnterOtp.js
 import React, { useState } from "react";
-import { Auth } from '../mocks'; // Using mock AWS services
-import { TextField, Button, Typography, Container, Box, CircularProgress, Alert, Link } from "@mui/material";
+import { Auth } from '../mocks';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import Container from '@mui/material/Container';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
+import Divider from '@mui/material/Divider';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { useNavigate, useLocation } from "react-router-dom";
 
 const EnterOtp = ({ email: propEmail }) => {
@@ -32,22 +42,55 @@ const EnterOtp = ({ email: propEmail }) => {
     };
 
     return (
-        <Container maxWidth="sm" style={{ marginTop: "40px" }}>
-            <Box sx={{ bgcolor: 'background.paper', p: 4, borderRadius: 2, boxShadow: 3, textAlign: 'center' }}>
-                <Typography variant="h5" component="h2" gutterBottom>Confirm Your Email</Typography>
-                <Typography variant="body1" gutterBottom sx={{ mb: 2 }}>Enter the verification code sent to <strong>{email}</strong>.</Typography>
+        <Container component="main" id="main-content" maxWidth="sm" sx={{ mt: { xs: 2, sm: 5 }, px: 2 }}>
+            <Paper elevation={3} sx={{ p: { xs: 2, sm: 4 }, borderRadius: 2 }}>
+                {/* Header */}
+                <Box sx={{ textAlign: 'center', mb: 2 }}>
+                    <VpnKeyIcon sx={{ fontSize: '3rem', color: 'primary.main', mb: 1 }} />
+                    <Typography variant="h4" component="h1" gutterBottom>
+                        Confirm Your Email
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Enter the verification code sent to <strong>{email}</strong>.
+                    </Typography>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                {/* Form */}
                 <form onSubmit={handleVerify}>
-                    <TextField label="Verification Code (OTP)" value={code} onChange={(e) => setCode(e.target.value)} fullWidth margin="normal" required disabled={loading || !!message} />
-                    {error && <Alert severity="error" sx={{ mt: 2, textAlign: 'left' }}>{error}</Alert>}
-                    {message && <Alert severity="success" sx={{ mt: 2, textAlign: 'left' }}>{message}</Alert>}
-                    <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading || !!message} sx={{ mt: 3, mb: 2 }} >
+                    <TextField
+                        label="Verification Code"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        fullWidth
+                        margin="normal"
+                        required
+                        disabled={loading || !!message}
+                        inputProps={{ maxLength: 6, pattern: '[0-9]*', inputMode: 'numeric' }}
+                        helperText="Enter the 6-digit code from your email"
+                    />
+                    {error && <Alert severity="error" role="alert" sx={{ mt: 2 }}>{error}</Alert>}
+                    {message && <Alert severity="success" role="status" sx={{ mt: 2 }}>{message}</Alert>}
+                    <Button
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        fullWidth
+                        disabled={loading || !!message}
+                        sx={{ mt: 3, mb: 2 }}
+                    >
                         {loading ? <CircularProgress size={24} color="inherit" /> : "Verify Code"}
                     </Button>
                 </form>
-                <Typography variant="body2" sx={{ mt: 3 }}>
-                    <Link component="button" onClick={() => navigate('/auth')} underline="hover">Back to Login/Signup</Link>
-                </Typography>
-            </Box>
+
+                {/* Footer */}
+                <Box sx={{ textAlign: 'center', mt: 2 }}>
+                    <Link component="button" onClick={() => navigate('/auth')} underline="hover">
+                        Back to Login/Signup
+                    </Link>
+                </Box>
+            </Paper>
         </Container>
     );
 };

@@ -1,21 +1,37 @@
 // src/components/AdminDashboard.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Auth, API, Storage } from '../mocks'; // Using mock AWS services
 
 // PDF Export Libraries
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-import {
-  Typography, Box, Button, Paper, CircularProgress, Alert,
-  Divider, TextField, FormControl, InputLabel, Select, MenuItem, LinearProgress,
-  Grid, Container, Fade, Tooltip,
-  Tabs, Tab,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  AlertTitle
-} from "@mui/material";
-
-// Icons
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import Divider from '@mui/material/Divider';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import LinearProgress from '@mui/material/LinearProgress';
+import Grid from '@mui/material/Grid';
+import Container from '@mui/material/Container';
+import Fade from '@mui/material/Fade';
+import Tooltip from '@mui/material/Tooltip';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import AlertTitle from '@mui/material/AlertTitle';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -27,8 +43,10 @@ import StopIcon from '@mui/icons-material/Stop';
 import GavelIcon from '@mui/icons-material/Gavel';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import LiveStatusIndicator from './LiveStatusIndicator';
+import AnimatedResults from './AnimatedResults';
+import { ResultsSkeleton } from './SkeletonLoaders';
 
 // CsvUploader Component
 const CsvUploader = ({ onUploadStatus }) => {
@@ -143,6 +161,8 @@ function a11yProps(index) {
 const AdminDashboard = ({ apiName }) => {
   // States
   const [adminUsername, setAdminUsername] = useState("");
+  const [availableRoles, setAvailableRoles] = useState(["President", "Secretary"]);
+  const [newRoleInput, setNewRoleInput] = useState("");
   const [candidateFormData, setCandidateFormData] = useState({ role: "President", candidate_id: "", name: "", party: "" });
   const [addingCandidate, setAddingCandidate] = useState(false);
   const [addCandidateMessage, setAddCandidateMessage] = useState("");
@@ -203,7 +223,7 @@ const AdminDashboard = ({ apiName }) => {
     }
   }, [currentApiName]);
   
-  // Fetch admin details and initial election status on mount
+  // Fetch admin details and initial election status on mount (parallel)
   useEffect(() => {
     const fetchAdminDetails = async () => {
       try {
@@ -211,13 +231,12 @@ const AdminDashboard = ({ apiName }) => {
         setAdminUsername(user.attributes.preferred_username || user.username);
       } catch (error) {
         console.error("AdminDashboard: Error fetching admin details:", error);
-        setActionError(`Error fetching admin details: ${error.message}`); // Use general actionError
+        setActionError(`Error fetching admin details: ${error.message}`);
         setAdminUsername("Admin (Error)");
       }
     };
     const loadInitialData = async () => {
-      await fetchAdminDetails(); // Wait for admin details to load
-      await fetchElectionStatus(); // Then fetch election status
+      await Promise.all([fetchAdminDetails(), fetchElectionStatus()]);
     }
     if (currentApiName) {
       loadInitialData();
@@ -230,27 +249,52 @@ const AdminDashboard = ({ apiName }) => {
 
 
   // Handlers
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setActionLoading(true);
-    setActionError(null); // Clear previous errors
+    setActionError(null);
     try {
       await Auth.signOut();
-      // App.js Auth listener should handle redirect.
     } catch (error) {
       console.error("Error signing out admin:", error);
       setActionError(`Logout failed: ${error.message}`);
     } finally {
       setActionLoading(false);
     }
-  };
+  }, []);
 
-  const handleCandidateFormChange = (e) => {
-    setCandidateFormData({ ...candidateFormData, [e.target.name]: e.target.value, });
-    setAddCandidateMessage(""); // Clear message on form change
-    setAddCandidateError("");   // Clear error on form change
-  };
+  const handleCandidateFormChange = useCallback((e) => {
+    setCandidateFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    setAddCandidateMessage("");
+    setAddCandidateError("");
+  }, []);
 
-  const handleAddCandidateSubmit = async (e) => {
+  const handleAddRole = useCallback(() => {
+    const trimmed = newRoleInput.trim();
+    if (!trimmed) return;
+    if (availableRoles.some(r => r.toLowerCase() === trimmed.toLowerCase())) {
+      setAddCandidateError(`Role "${trimmed}" already exists.`);
+      return;
+    }
+    const capitalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    setAvailableRoles(prev => [...prev, capitalized]);
+    setNewRoleInput("");
+    setAddCandidateError("");
+    setAddCandidateMessage(`Role "${capitalized}" added successfully!`);
+  }, [newRoleInput, availableRoles]);
+
+  const handleRemoveRole = useCallback((roleToRemove) => {
+    if (availableRoles.length <= 1) {
+      setAddCandidateError("Cannot remove the last remaining role. At least one role is required.");
+      return;
+    }
+    setAvailableRoles(prev => prev.filter(r => r !== roleToRemove));
+    if (candidateFormData.role === roleToRemove) {
+      setCandidateFormData(prev => ({ ...prev, role: availableRoles.find(r => r !== roleToRemove) || "" }));
+    }
+    setAddCandidateMessage(`Role "${roleToRemove}" removed.`);
+  }, [availableRoles, candidateFormData.role]);
+
+  const handleAddCandidateSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!currentApiName) { setAddCandidateError("API endpoint name is not configured."); return; }
     setAddingCandidate(true); setAddCandidateMessage(""); setAddCandidateError("");
@@ -263,21 +307,21 @@ const AdminDashboard = ({ apiName }) => {
     try {
       const response = await API.post(currentApiName, "/candidates", { body: candidateFormData });
       setAddCandidateMessage(response.message || "Candidate added successfully!");
-      setCandidateFormData({ role: candidateFormData.role, candidate_id: "", name: "", party: "" }); // Reset form but keep role
+      setCandidateFormData(prev => ({ role: prev.role, candidate_id: "", name: "", party: "" }));
     } catch (error) {
       const backendError = error.response?.data?.error || error.response?.data?.message || (typeof error.response?.data === 'string' ? error.response.data : null);
       setAddCandidateError(`Failed to add candidate: ${backendError || error.message || 'Unknown API error'}`);
     } finally {
       setAddingCandidate(false);
     }
-  };
+  }, [currentApiName, candidateFormData]);
 
-  const handleCsvUploadStatus = (message, error) => {
+  const handleCsvUploadStatus = useCallback((message, error) => {
     setCsvUploadMessage(message || "");
     setCsvUploadError(error || "");
-  };
+  }, []);
 
-  const fetchVotingResults = async () => {
+  const fetchVotingResults = useCallback(async () => {
     setResultsLoading(true); setResultsError(null); setVotingResults(null);
     if (!currentApiName) { setResultsError("API Name not configured."); setResultsLoading(false); return; }
     try {
@@ -293,13 +337,13 @@ const AdminDashboard = ({ apiName }) => {
         const backendError = error.response?.data?.error || error.response?.data?.message || (typeof error.response?.data === 'string' ? error.response.data : null);
         setResultsError(`Error fetching results: ${backendError || error.message || 'Could not fetch results.'}`);
       }
-      setVotingResults(null); // Clear results on error
+      setVotingResults(null);
     } finally {
       setResultsLoading(false);
     }
-  };
+  }, [currentApiName]);
 
-  const handleElectionAction = async (actionPath, successMessagePrefix, failureMessagePrefix, expectedNewStatusFrontend) => {
+  const handleElectionAction = useCallback(async (actionPath, successMessagePrefix, failureMessagePrefix, expectedNewStatusFrontend) => {
     setActionLoading(true); setActionMessage(null); setActionError(null);
     if (!currentApiName) { setActionError("API Name not configured."); setActionLoading(false); return; }
     try {
@@ -307,62 +351,60 @@ const AdminDashboard = ({ apiName }) => {
       const response = await API.post(currentApiName, actionPath, {});
       console.log(`AdminDashboard: Action ${actionPath} response:`, response);
       setActionMessage(response.message || `${successMessagePrefix} successfully!`);
-      setElectionStatus(response.newStatus || expectedNewStatusFrontend); // Optimistic update or from response
+      setElectionStatus(response.newStatus || expectedNewStatusFrontend);
     } catch (error) {
       console.error(`AdminDashboard: Error performing action ${actionPath}:`, error);
       const backendError = error.response?.data?.error || error.response?.data?.message || `Failed to ${failureMessagePrefix.toLowerCase()}.`;
       setActionError(`${failureMessagePrefix} Failed: ${backendError}`);
-      // Re-fetch true status on error
       if (error.response?.data?.currentStatus) {
         setElectionStatus(error.response.data.currentStatus);
       } else {
-        fetchElectionStatus(); 
+        fetchElectionStatus();
       }
     } finally {
       setActionLoading(false);
     }
-  };
+  }, [currentApiName, fetchElectionStatus]);
 
-  const handleStartElection = () => handleElectionAction("/election/start", "Election started", "Start Election", 'RUNNING');
-  const handleStopElection = () => handleElectionAction("/election/stop", "Election stopped", "Stop Election", 'STOPPED');
-  const handleDeclareResults = () => handleElectionAction("/election/declare", "Results declared", "Declare Results", 'RESULTS_DECLARED');
+  const handleStartElection = useCallback(() => handleElectionAction("/election/start", "Election started", "Start Election", 'RUNNING'), [handleElectionAction]);
+  const handleStopElection = useCallback(() => handleElectionAction("/election/stop", "Election stopped", "Stop Election", 'STOPPED'), [handleElectionAction]);
+  const handleDeclareResults = useCallback(() => handleElectionAction("/election/declare", "Results declared", "Declare Results", 'RESULTS_DECLARED'), [handleElectionAction]);
 
-  const handleInitiateResetElection = () => { setOpenResetDialog(true); };
-  const handleConfirmResetElection = async () => {
+  const handleInitiateResetElection = useCallback(() => { setOpenResetDialog(true); }, []);
+  const handleConfirmResetElection = useCallback(async () => {
     setOpenResetDialog(false);
     setActionLoading(true); setActionMessage(null); setActionError(null);
     if (!currentApiName) { setActionError("API Name not configured for reset."); setActionLoading(false); return; }
     try {
       const response = await API.post(currentApiName, "/election/reset", {});
       setActionMessage(response.message || "Election cycle has been reset successfully!");
-      setElectionStatus(response.newStatus || 'NOT_STARTED'); // Update frontend status
-      setVotingResults(null); // Clear results as they are no longer valid
-      setAddCandidateMessage(""); setAddCandidateError(""); // Clear other messages
+      setElectionStatus(response.newStatus || 'NOT_STARTED');
+      setVotingResults(null);
+      setAddCandidateMessage(""); setAddCandidateError("");
     } catch (error) {
       const backendError = error.response?.data?.error || error.message || "Failed to reset.";
       setActionError(`Reset Failed: ${backendError}`);
-      fetchElectionStatus(); // Re-fetch true status on error
+      fetchElectionStatus();
     } finally {
       setActionLoading(false);
     }
-  };
+  }, [currentApiName, fetchElectionStatus]);
 
-  const handleTabChange = (event, newValue) => {
+  const handleTabChange = useCallback((event, newValue) => {
     setCurrentTab(newValue);
-    // Clear messages from other tabs when switching
     setActionMessage(null); setActionError(null);
     setCsvUploadMessage(""); setCsvUploadError("");
     setAddCandidateMessage(""); setAddCandidateError("");
 
     if (newValue === 1 && (!votingResults || resultsError) && !resultsLoading) {
-      fetchVotingResults(); // Fetch results if View Results tab is selected and data isn't there/fresh
+      fetchVotingResults();
     }
-    if (newValue === 2 && !statusLoading) { // Election Control tab
-      fetchElectionStatus(); // Refresh status
+    if (newValue === 2 && !statusLoading) {
+      fetchElectionStatus();
     }
-  };
+  }, [fetchVotingResults, fetchElectionStatus, votingResults, resultsError, resultsLoading, statusLoading]);
 
-  const handleExportPdf = () => {
+  const handleExportPdf = useCallback(() => {
     if (!votingResults || Object.keys(votingResults).length === 0) {
       setActionError("No results available to export."); // Use actionError for general messages
       setTimeout(() => setActionError(null), 3000);
@@ -441,11 +483,11 @@ const AdminDashboard = ({ apiName }) => {
         setActionError("Failed to export results as PDF.");
         setTimeout(() => setActionError(null), 3000);
     }
-  };
+  }, [votingResults]);
 
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', minHeight: '100vh', bgcolor: 'grey.100', py: { xs: 2, sm: 3, md: 4 }, px: { xs: 1, sm: 2 }, boxSizing: 'border-box' }}>
+    <Box component="main" id="main-content" role="main" sx={{ display: 'flex', justifyContent: 'center', minHeight: '100vh', bgcolor: 'grey.100', py: { xs: 2, sm: 3, md: 4 }, px: { xs: 1, sm: 2 }, boxSizing: 'border-box' }}>
       <Fade in={startAnimation} timeout={600}>
         <Container maxWidth="lg" disableGutters sx={{ boxSizing: 'border-box' }}>
           <Paper elevation={4} sx={{ p: { xs: 1.5, sm: 2.5, md: 3.5 }, borderRadius: '12px', boxShadow: '0px 10px 30px rgba(0,0,0,0.1)' }}>
@@ -464,20 +506,18 @@ const AdminDashboard = ({ apiName }) => {
             <Divider sx={{ my: 2.5 }} />
 
             {/* --- Overview Section --- */}
-            <Paper elevation={0} sx={{ p: 2, mb: 3, backgroundColor: 'primary.lighter', borderRadius: '8px', border: theme => `1px solid ${theme.palette.primary.light}` }}>
-              <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', color: 'primary.darker' }}>
+            <Paper elevation={0} sx={{ p: 2, mb: 4, backgroundColor: 'primary.50', borderRadius: 2, border: theme => `1px solid ${theme.palette.primary[200]}` }}>
+              <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', color: 'primary.main' }}>
                 <DashboardIcon sx={{ mr: 1 }} /> Election Overview
               </Typography>
-              <Grid container spacing={1}>
+              <Grid container spacing={2} alignItems="center">
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body1" component="div" sx={{ display: 'flex', alignItems: 'center' }}>
-                    Current Status:
+                    Current Status:{' '}
                     {statusLoading ? (
-                      <CircularProgress size={16} sx={{ ml: 1 }} />
+                      <CircularProgress size={20} sx={{ ml: 1 }} aria-label="Loading election status" />
                     ) : (
-                      <strong style={{ marginLeft: '8px', color: electionStatus === 'RUNNING' ? 'green' : (electionStatus === 'STOPPED' ? 'orange' : (electionStatus === 'RESULTS_DECLARED' ? 'blue' : 'inherit')) }}>
-                        {electionStatus || 'N/A'}
-                      </strong>
+                      <Box sx={{ ml: 1 }}><LiveStatusIndicator status={electionStatus} /></Box>
                     )}
                   </Typography>
                 </Grid>
@@ -506,9 +546,105 @@ const AdminDashboard = ({ apiName }) => {
               {/* Add Candidate Section Content */}
               <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 } }}>
                 {!currentApiName && <Alert severity="warning" sx={{ mb: 2 }}>API Name not provided. Cannot add candidates.</Alert>}
+
+                {/* Role Management Section */}
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="h6" sx={{ mb: 1.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SettingsIcon sx={{ fontSize: '1.2em' }} /> Manage Roles
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Add or remove election roles. Changes apply immediately.
+                  </Typography>
+
+                  {/* Existing Roles */}
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                    {availableRoles.map((role) => (
+                      <motion.div
+                        key={role}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                      >
+                        <Box
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 100,
+                            bgcolor: 'primary.light',
+                            color: 'primary.contrastText',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {role}
+                          <Box
+                            component="button"
+                            onClick={() => handleRemoveRole(role)}
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              border: 'none',
+                              bgcolor: 'rgba(255,255,255,0.3)',
+                              color: 'inherit',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              lineHeight: 1,
+                              '&:hover': { bgcolor: 'rgba(255,255,255,0.5)' },
+                            }}
+                            aria-label={`Remove ${role} role`}
+                          >
+                            ×
+                          </Box>
+                        </Box>
+                      </motion.div>
+                    ))}
+                  </Box>
+
+                  {/* Add New Role */}
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      label="New Role Name"
+                      value={newRoleInput}
+                      onChange={(e) => setNewRoleInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddRole(); } }}
+                      placeholder="e.g., Treasurer"
+                      sx={{ flex: 1 }}
+                    />
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={handleAddRole}
+                      disabled={!newRoleInput.trim()}
+                      startIcon={<AddCircleOutlineIcon />}
+                    >
+                      Add Role
+                    </Button>
+                  </Box>
+                </Box>
+
+                <Divider sx={{ my: 2.5 }} />
+
+                {/* Candidate Form */}
                 <form onSubmit={handleAddCandidateSubmit}>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}> <FormControl fullWidth margin="normal" required variant="outlined"> <InputLabel id="role-select-label">Role</InputLabel> <Select labelId="role-select-label" name="role" value={candidateFormData.role} onChange={handleCandidateFormChange} label="Role" > <MenuItem value="President">President</MenuItem> <MenuItem value="Secretary">Secretary</MenuItem> </Select> </FormControl> </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth margin="normal" required variant="outlined">
+                        <InputLabel id="role-select-label">Role</InputLabel>
+                        <Select labelId="role-select-label" name="role" value={candidateFormData.role} onChange={handleCandidateFormChange} label="Role">
+                          {availableRoles.map((role) => (
+                            <MenuItem key={role} value={role}>{role}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
                     <Grid item xs={12} sm={6}> <TextField label="Candidate ID" type="text" name="candidate_id" value={candidateFormData.candidate_id} onChange={handleCandidateFormChange} fullWidth margin="normal" required helperText="Unique ID (e.g., pres_001)" variant="outlined" /> </Grid>
                     <Grid item xs={12} sm={6}> <TextField label="Candidate Name" type="text" name="name" value={candidateFormData.name} onChange={handleCandidateFormChange} fullWidth margin="normal" required variant="outlined" /> </Grid>
                     <Grid item xs={12} sm={6}> <TextField label="Party" type="text" name="party" value={candidateFormData.party} onChange={handleCandidateFormChange} fullWidth margin="normal" required variant="outlined" /> </Grid>
@@ -522,22 +658,21 @@ const AdminDashboard = ({ apiName }) => {
 
             <TabPanel value={currentTab} index={1}>
               {/* View Results Section Content */}
-              <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, minHeight: 200 }}>
-                {resultsLoading && <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', my: 3, height: '100%' }}><CircularProgress size={40} /></Box>}
+              <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, minHeight: 200 }}>
+                {resultsLoading && <ResultsSkeleton />}
                 {resultsError && <Alert severity="error" sx={{ mt: 2 }}><AlertTitle>Error Loading Results</AlertTitle>{resultsError}</Alert>}
                 
                 {votingResults && !resultsLoading && !resultsError && (
                   <Box>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                       <Tooltip title="Export results as a PDF document">
-                        <span> {/* Tooltip needs a span wrapper for disabled button */}
+                        <span>
                           <Button
                             variant="outlined"
                             color="secondary"
                             onClick={handleExportPdf}
                             startIcon={<PictureAsPdfIcon />}
                             disabled={!votingResults || Object.keys(votingResults).length === 0}
-                            sx={{ textTransform: 'none' }}
                           >
                             Export to PDF
                           </Button>
@@ -545,29 +680,54 @@ const AdminDashboard = ({ apiName }) => {
                       </Tooltip>
                     </Box>
 
-                    {Object.entries(votingResults).length > 0 ? Object.entries(votingResults).map(([role, candidates]) => (<Box key={role} sx={{ mb: 3 }}> <Typography variant="h6" component="h4" gutterBottom sx={{ textTransform: 'capitalize', borderBottom: '1px solid #ccc', pb: 1, color: 'text.primary', fontSize: { xs: '1rem', sm: '1.15rem' } }}>{role}</Typography> {candidates && candidates.length > 0 ? (<Box component="ul" sx={{ listStyle: 'none', p: 0 }}> {candidates.sort((a, b) => b.vote_count - a.vote_count).map((candidate, index) => (<Paper component="li" elevation={index === 0 ? 3 : 1} key={candidate.candidate_id} sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, p: 1.5, mb: 1, borderRadius: '8px', bgcolor: index === 0 ? 'success.lighter' : 'background.paper', borderLeft: index === 0 ? `5px solid` : '1px solid', borderColor: index === 0 ? 'success.main' : 'grey.300', transition: 'all 0.2s ease-in-out', '&:hover': { boxShadow: 3, transform: 'translateY(-1px)' } }}> <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 1, sm: 0 } }}> <Typography variant="body1" component="span" sx={{ mr: 1.5, color: index === 0 ? 'success.dark' : 'text.secondary', minWidth: '20px', fontWeight: 'medium' }}>#{index + 1}</Typography> <Box> <Typography variant="body1" component="div" sx={{ fontWeight: 'medium', fontSize: { xs: '0.95rem', sm: '1.05rem' }, color: index === 0 ? 'success.darker' : 'text.primary' }}> {candidate.name || candidate.candidate_id} {index === 0 && <EmojiEventsIcon sx={{ color: 'gold', verticalAlign: 'middle', ml: 0.5, fontSize: '1.2em' }} />} </Typography> <Typography variant="body2" component="span" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}> Party: ({candidate.party || 'N/A'}) </Typography> </Box> </Box> <Typography variant="body1" sx={{ fontWeight: 'bold', color: index === 0 ? 'success.dark' : 'secondary.main', fontSize: { xs: '0.95rem', sm: '1.05rem' }, mt: { xs: 1, sm: 0 }, alignSelf: { xs: 'flex-end', sm: 'center' } }}> {candidate.vote_count} Votes </Typography> </Paper>))} </Box>) : (<Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>No votes recorded or results available for this role.</Typography>)} </Box>)) : (<Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 2, textAlign: 'center' }}>No voting results data is currently published.</Typography>)} 
+                    <AnimatedResults results={votingResults} />
                   </Box>
                 )}
-                {!votingResults && !resultsLoading && !resultsError && (<Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 2, textAlign: 'center' }}> Click the "View Results" tab to fetch results. </Typography>)}
+                {!votingResults && !resultsLoading && !resultsError && (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <BarChartIcon sx={{ fontSize: '4rem', color: 'grey.300', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>No Results Yet</Typography>
+                    <Typography variant="body2" color="text.disabled">Results will appear here once the election is stopped and declared.</Typography>
+                  </Box>
+                )}
               </Paper>
             </TabPanel>
 
             <TabPanel value={currentTab} index={2}>
               {/* Manage Election Section Content */}
-              <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 } }}>
-                <Box sx={{ my: 2, p: { xs: 1, sm: 1.5 }, border: '1px solid #b0bec5', borderRadius: '8px', bgcolor: 'grey.100' }}>
-                  <Typography variant="body1" component="div" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}> <span style={{ fontSize: '0.95rem' }}>Current Status: {statusLoading ? <CircularProgress size={18} sx={{ ml: 1 }} /> : <strong style={{ marginLeft: '8px', color: electionStatus === 'RUNNING' ? 'green' : (electionStatus === 'STOPPED' ? 'orange' : (electionStatus === 'RESULTS_DECLARED' ? 'blue' : 'inherit')) }}>{electionStatus || 'N/A'}</strong>}</span> <Tooltip title="Refresh Status"> <Button size="small" onClick={fetchElectionStatus} disabled={statusLoading || actionLoading} startIcon={<RefreshIcon />} sx={{ textTransform: 'none' }}>Refresh</Button> </Tooltip> </Typography>
-                  {statusError && <Alert severity="warning" sx={{ mt: 1, textAlign: 'left', fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>{statusError}</Alert>}
+              <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 } }}>
+                <Box sx={{ my: 2, p: { xs: 2, sm: 2.5 }, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'action.hover' }}>
+                  <Typography variant="body1" component="div" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                    <span style={{ fontSize: '0.95rem' }}>
+                      Current Status:{' '}
+                      {statusLoading ? (
+                        <CircularProgress size={20} sx={{ ml: 1 }} aria-label="Loading election status" />
+                      ) : (
+                        <LiveStatusIndicator status={electionStatus} />
+                      )}
+                    </span>
+                    <Tooltip title="Refresh Status">
+                      <Button onClick={fetchElectionStatus} disabled={statusLoading || actionLoading} startIcon={<RefreshIcon />}>Refresh</Button>
+                    </Tooltip>
+                  </Typography>
+                  {statusError && <Alert severity="warning" sx={{ mt: 1, textAlign: 'left' }}>{statusError}</Alert>}
                 </Box>
-                <Grid container spacing={1.5} justifyContent="center" alignItems="center">
-                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Allow users to start voting"> <Button fullWidth variant="contained" color="success" onClick={handleStartElection} disabled={actionLoading || statusLoading || electionStatus === 'RUNNING' || electionStatus === 'RESULTS_DECLARED'} startIcon={<PlayArrowIcon />} sx={{ textTransform: 'none' }}> Start </Button> </Tooltip> </Grid>
-                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Stop accepting new votes"> <Button fullWidth variant="contained" color="error" onClick={handleStopElection} disabled={actionLoading || statusLoading || electionStatus !== 'RUNNING'} startIcon={<StopIcon />} sx={{ textTransform: 'none' }}> Stop </Button> </Tooltip> </Grid>
-                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Make voting results public (after stopping)"> <Button fullWidth variant="contained" color="info" onClick={handleDeclareResults} disabled={actionLoading || statusLoading || electionStatus !== 'STOPPED'} startIcon={<GavelIcon />} sx={{ textTransform: 'none' }}> Declare </Button> </Tooltip> </Grid>
-                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Reset all votes and election status to NOT_STARTED"> <Button fullWidth variant="outlined" color="warning" onClick={handleInitiateResetElection} disabled={actionLoading || statusLoading || electionStatus === 'RUNNING'} startIcon={<RestartAltIcon />} sx={{ textTransform: 'none' }}> Reset Cycle </Button> </Tooltip> </Grid>
+                <Grid container spacing={2} justifyContent="center" alignItems="center">
+                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Allow users to start voting"> <Button fullWidth variant="contained" color="success" onClick={handleStartElection} disabled={actionLoading || statusLoading || electionStatus === 'RUNNING' || electionStatus === 'RESULTS_DECLARED'} startIcon={<PlayArrowIcon />}> Start </Button> </Tooltip> </Grid>
+                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Stop accepting new votes"> <Button fullWidth variant="outlined" color="error" onClick={handleStopElection} disabled={actionLoading || statusLoading || electionStatus !== 'RUNNING'} startIcon={<StopIcon />}> Stop </Button> </Tooltip> </Grid>
+                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Make voting results public (after stopping)"> <Button fullWidth variant="outlined" color="info" onClick={handleDeclareResults} disabled={actionLoading || statusLoading || electionStatus !== 'STOPPED'} startIcon={<GavelIcon />}> Declare </Button> </Tooltip> </Grid>
+                  <Grid item xs={12} sm={6} md={3}> <Tooltip title="Reset all votes and election status to NOT_STARTED"> <Button fullWidth variant="text" color="warning" onClick={handleInitiateResetElection} disabled={actionLoading || statusLoading || electionStatus === 'RUNNING'} startIcon={<RestartAltIcon />}> Reset Cycle </Button> </Tooltip> </Grid>
                 </Grid>
-                {(actionError || actionMessage) && <Box sx={{ mt: 2.5 }}> {actionError && <Alert severity="error" sx={{ textAlign: 'left' }}>{actionError}</Alert>} {actionMessage && <Alert severity="success" sx={{ textAlign: 'left' }}>{actionMessage}</Alert>} </Box>}
+                <AnimatePresence>
+                  {(actionError || actionMessage) && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}>
+                      <Box sx={{ mt: 2.5 }}> {actionError && <Alert severity="error" sx={{ textAlign: 'left' }}>{actionError}</Alert>} {actionMessage && <Alert severity="success" sx={{ textAlign: 'left' }}>{actionMessage}</Alert>} </Box>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </Paper>
             </TabPanel>
+
             {/* --- TabPanel Content END --- */}
 
 
