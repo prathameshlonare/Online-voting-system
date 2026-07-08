@@ -6,6 +6,9 @@
   <img src="https://img.shields.io/badge/Status-Demo-green" alt="Status">
   <img src="https://img.shields.io/badge/React-18.2-blue" alt="React">
   <img src="https://img.shields.io/badge/Tests-34%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/IaC-CloudFormation%20%7C%20Terraform-purple" alt="IaC">
+  <img src="https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-orange" alt="CI/CD">
+  <img src="https://img.shields.io/badge/Docker-Multi--stage%20Build-blue" alt="Docker">
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 
@@ -83,13 +86,16 @@ We successfully conducted the college voting election for **500+ students** usin
 | Routing | React Router v6 |
 | Animations | framer-motion, canvas-confetti |
 | Testing | Jest, React Testing Library, @testing-library/user-event |
-| Authentication | AWS Cognito (Mocked for demo) |
-| API | AWS API Gateway (Mocked for demo) |
-| Storage | AWS S3 (Mocked for demo) |
+| Authentication | AWS Cognito |
+| API | AWS API Gateway |
+| Storage | AWS S3 |
 | Backend | AWS Lambda (Python 3.9) |
 | Database | Amazon DynamoDB |
+| IaC | AWS CloudFormation, Terraform |
+| CI/CD | GitHub Actions |
+| Containerization | Docker (multi-stage), nginx |
+| Monitoring | CloudWatch Dashboards + Alarms |
 | PDF Generation | jsPDF + jspdf-autotable |
-| Fonts | Playfair Display, Outfit, JetBrains Mono |
 
 ---
 
@@ -98,65 +104,60 @@ We successfully conducted the college voting election for **500+ students** usin
 ```
 voting-app/
 ├── Lambda Functions/              # AWS Lambda backend (Python)
-│   ├── addCandidate.py           # Add election candidates
-│   ├── checkEligibility.py       # Check student voting eligibility
-│   ├── declearResult.py          # Declare election results
-│   ├── getCandidate.py           # Get all candidates
-│   ├── getElectionStatus.py      # Get current election status
-│   ├── getVotingResults.py       # Get aggregated voting results
-│   ├── resetElectionCycle.py     # Reset election for new cycle
-│   ├── startElection.py          # Start the election
-│   ├── stopElection.py           # Stop the election
-│   ├── submitVote.py             # Submit student vote
-│   ├── uploadStudentMaster.py    # Upload student CSV data
-│   └── validateStudentRegistration.py  # Validate student registration
+│   ├── addCandidate.py
+│   ├── checkEligibility.py
+│   ├── declearResult.py
+│   ├── getCandidate.py
+│   ├── getElectionStatus.py
+│   ├── getVotingResults.py
+│   ├── resetElectionCycle.py
+│   ├── startElection.py
+│   ├── stopElection.py
+│   ├── submitVote.py
+│   ├── uploadStudentMaster.py
+│   └── validateStudentRegistration.py
 │
 ├── .github/workflows/
-│   └── build.yml                 # GitHub Actions CI/CD pipeline
+│   ├── ci.yml                     # Tests + security scanning on PR
+│   └── deploy.yml                 # CloudFormation deploy (manual trigger)
+│
+├── infrastructure/
+│   ├── cloudformation/
+│   │   └── template.yaml          # Full AWS stack (DynamoDB, Lambda, API GW, Cognito, S3, CloudFront, IAM, CloudWatch)
+│   └── terraform/
+│       ├── main.tf                # Same stack in Terraform HCL
+│       ├── variables.tf           # Parameterized config
+│       └── outputs.tf             # API URL, CloudFront domain, Cognito IDs
+│
+├── docker/
+│   ├── Dockerfile                 # Multi-stage React build (nginx)
+│   ├── nginx.conf                 # SPA routing + gzip
+│   └── docker-compose.yml         # Local development
 │
 ├── src/                          # React frontend
-│   ├── index.js                  # Application entry point + ThemeProvider
-│   ├── App.js                    # Main app component with routing
-│   ├── theme.js                  # Centralized MUI theme configuration
-│   ├── setupTests.js             # Jest test setup
-│   │
-│   ├── mocks/                    # Mock AWS services (for demo)
-│   │   ├── index.js             # Exports all mock services
-│   │   ├── mockAuth.js          # Mock Cognito authentication
-│   │   ├── mockApi.js           # Mock API Gateway responses
-│   │   └── mockStorage.js       # Mock S3 storage
-│   │
+│   ├── index.js                  # Entry point + ThemeProvider
+│   ├── App.js                    # Main app with routing
+│   ├── theme.js                  # Centralized MUI theme
+│   ├── mocks/                    # Mock AWS services (for local demo)
+│   │   ├── mockAuth.js
+│   │   ├── mockApi.js
+│   │   └── mockStorage.js
 │   ├── components/
-│   │   ├── WelcomePage.js        # Dark cinematic landing page
-│   │   ├── AuthForm.js           # Login/Signup/Forgot Password form
-│   │   ├── EnterOtp.js           # OTP verification
-│   │   ├── VoteForm.js           # Student voting interface
-│   │   ├── AdminDashboard.js     # Admin control panel
-│   │   ├── ConfettiCelebration.js# Confetti burst on vote success
-│   │   ├── AnimatedResults.js    # Animated results with counters
-│   │   ├── CandidateCard.js      # Interactive candidate selection card
-│   │   ├── LiveStatusIndicator.js# Pulsing election status dot
-│   │   ├── VoteProgressStepper.js# Vote step progress tracker
-│   │   └── SkeletonLoaders.js    # Skeleton loading placeholders
-│   │
-│   └── *.test.js                 # Component test files (8 files, 34 tests)
+│   │   ├── WelcomePage.js
+│   │   ├── AuthForm.js
+│   │   ├── EnterOtp.js
+│   │   ├── VoteForm.js
+│   │   ├── AdminDashboard.js
+│   │   ├── ConfettiCelebration.js
+│   │   ├── AnimatedResults.js
+│   │   ├── CandidateCard.js
+│   │   ├── LiveStatusIndicator.js
+│   │   ├── VoteProgressStepper.js
+│   │   └── SkeletonLoaders.js
+│   └── *.test.js                 # 8 test suites, 34 tests
 │
 ├── screenshots/
-│   ├── architecture diagram/     # AWS architecture diagrams
-│   │   └── system_architecture.png
-│   └── voting app photos/        # UI screenshots
-│       ├── login_page.png
-│       ├── sign_up_page.png
-│       ├── vote_form.png
-│       ├── vote_results.png
-│       ├── add_candidate.png
-│       └── election_control.png
-│
 ├── public/
-│   ├── index.html
-│   ├── manifest.json
-│   └── logo.jpg
-│
 ├── package.json
 └── README.md
 ```
@@ -233,7 +234,8 @@ npm test -- --watchAll=false --coverage
 
 ### GitHub Actions
 
-Tests run automatically on every push and pull request via `.github/workflows/build.yml`.
+- **CI (`ci.yml`)**: Runs on every push/PR — tests, bandit security scan, npm audit, eslint
+- **CD (`deploy.yml`)**: Manual trigger — deploys CloudFormation stack, builds React, syncs to S3, invalidates CloudFront
 
 ---
 
@@ -300,6 +302,22 @@ The application will open at: **http://localhost:3000**
 
 ---
 
+## 🐳 Docker
+
+```bash
+# Build and run locally
+cd docker
+docker-compose up --build
+
+# Or build the image directly
+docker build -t voting-app -f Dockerfile ..
+docker run -p 3000:80 voting-app
+```
+
+Multi-stage build: Node.js 18 Alpine for build, nginx Alpine for production (~25MB image).
+
+---
+
 ## 📋 Features
 
 ### For Students
@@ -354,48 +372,40 @@ The application will open at: **http://localhost:3000**
 
 ---
 
-## 🔌 Connecting Real Backend
+## 🔌 Deploying to AWS
 
-To connect this demo to a real AWS backend:
+The full infrastructure is defined as code. Choose your tool:
 
-1. **Create AWS Resources:**
-   - AWS Cognito User Pool
-   - API Gateway REST API
-   - Lambda functions (see Lambda Functions folder)
-   - DynamoDB Tables: Config, Candidates, Votes, Users, Attendance
-   - S3 bucket for CSV storage
+### Option A: CloudFormation
 
-2. **Configure Credentials:**
-   Create `src/aws-exports.js` with your AWS configuration:
-   ```javascript
-   const awsExports = {
-     Auth: {
-       region: 'us-east-1',
-       userPoolId: 'us-east-1_YOUR_USER_POOL_ID',
-       userPoolWebClientId: 'YOUR_CLIENT_ID',
-       identityPoolId: 'us-east-1:YOUR_IDENTITY_POOL_ID'
-     },
-     API: {
-       endpoints: [{
-         name: "voteApi",
-         endpoint: "https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod",
-         region: "us-east-1",
-         authorizationType: "COGNITO_USER_POOLS"
-       }]
-     },
-     Storage: {
-       AWS-S3: {
-         bucket: 'your-bucket-name',
-         region: 'us-east-1'
-       }
-     }
-   };
-   export default awsExports;
-   ```
+```bash
+aws cloudformation deploy \
+  --template-file infrastructure/cloudformation/template.yaml \
+  --stack-name rcert-voting-prod \
+  --capabilities CAPABILITY_NAMED_IAM
+```
 
-3. **Update Imports:**
-   - In `src/index.js`: Import from `aws-amplify` instead of `./mocks`
-   - Update all component imports similarly
+### Option B: Terraform
+
+```bash
+cd infrastructure/terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+### Option C: GitHub Actions
+
+Go to Actions → Deploy → Run workflow. Requires `AWS_DEPLOYMENT_ROLE_ARN` secret configured in the repository.
+
+### What Gets Deployed
+
+- 5 DynamoDB tables (Config, Candidates, Votes, Users, Attendance)
+- 12 Lambda functions with IAM least-privilege roles
+- API Gateway REST API with Cognito authorization
+- Cognito User Pool + Client
+- S3 bucket + CloudFront distribution for React app
+- CloudWatch dashboard + error alarms
 
 ---
 
