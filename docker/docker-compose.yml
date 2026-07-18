@@ -9,15 +9,3 @@ services:
       - "3000:80"
     environment:
       - REACT_APP_API_URL=http://localhost:3001
-    depends_on:
-      - mock-api
-
-  mock-api:
-    image: node:18-alpine
-    working_dir: /app
-    volumes:
-      - ../src/mocks:/app
-    ports:
-      - "3001:3001"
-    command: >
-      sh -c "echo 'Mock API running on port 3001' && sleep infinity"
