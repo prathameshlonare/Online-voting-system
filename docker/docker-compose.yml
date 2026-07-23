@@ -1,11 +1,63 @@
 version: "3.8"
 
 services:
-  voting-app:
+  # ==================== FRONTEND ====================
+  frontend:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        - REACT_APP_API_URL=http://backend:4000
     ports:
       - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - voting-network
+    restart: unless-stopped
+
+  # ==================== BACKEND ====================
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "4000:4000"
     environment:
-      - REACT_APP_API_URL=http://localhost:3001
+      - PORT=4000
+      - DYNAMODB_ENDPOINT=http://dynamodb:8000
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=local
+      - CONFIG_TABLE_NAME=Config
+      - VOTES_TABLE_NAME=Votes
+      - CANDIDATES_TABLE_NAME=Candidates
+    depends_on:
+      - dynamodb
+    networks:
+      - voting-network
+    restart: unless-stopped
+
+  # ==================== DYNAMODB LOCAL ====================
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    environment:
+      - AWS_ACCESS_KEY_ID=local
+      - AWS_SECRET_ACCESS_KEY=local
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    networks:
+      - voting-network
+    restart: unless-stopped
+
+networks:
+  voting-network:
+    driver: bridge
+
+volumes:
+  dynamodb-data:
+    driver: local
