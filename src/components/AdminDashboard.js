@@ -1,7 +1,8 @@
 // src/components/AdminDashboard.js
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Auth, API, Storage } from '../mocks'; // Using mock AWS services
+import { Auth, Storage } from '../mocks'; // Using mock AWS services
+import { api as API } from '../api';
 
 // PDF Export Libraries
 import jsPDF from 'jspdf';
