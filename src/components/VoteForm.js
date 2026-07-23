@@ -1,7 +1,8 @@
 // src/components/VoteForm.js
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Auth, API } from "../mocks";
+import { Auth } from "../mocks";
+import { api as API } from "../api";
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
