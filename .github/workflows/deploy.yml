@@ -37,7 +37,7 @@ jobs:
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
-            --template-file infrastructure/cloudformation/template.yaml \
+            --template-file infra/cloudformation/template.yaml \
             --stack-name rcert-voting-prod \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset
@@ -64,12 +64,15 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+          cache-dependency-path: frontend/yarn.lock
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+        working-directory: frontend
 
       - name: Build React app
         run: yarn build
+        working-directory: frontend
         env:
           REACT_APP_API_URL: ${{ needs.deploy-infrastructure.outputs.api_url }}
 
@@ -90,7 +93,7 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync build/ s3://${{ steps.s3.outputs.bucket }}/ \
+          aws s3 sync frontend/build/ s3://${{ steps.s3.outputs.bucket }}/ \
             --delete \
             --cache-control "public, max-age=31536000"
 
