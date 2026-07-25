@@ -131,8 +131,11 @@ voting-app/
 │
 ├── docker/
 │   ├── Dockerfile                 # Multi-stage React build (nginx)
+│   ├── Dockerfile.backend         # Backend container
 │   ├── nginx.conf                 # SPA routing + gzip
-│   └── docker-compose.yml         # Local development
+│   ├── server.js                  # HTTP mock API wrapper
+│   ├── docker-compose.yml         # Local development
+│   └── docker-compose.prod.yml    # Production overrides
 │
 ├── src/                          # React frontend
 │   ├── index.js                  # Entry point + ThemeProvider
@@ -305,16 +308,16 @@ The application will open at: **http://localhost:3000**
 ## 🐳 Docker
 
 ```bash
-# Build and run locally
+# Build and run locally (all 3 services)
 cd docker
-docker-compose up --build
+docker compose up --build
 
-# Or build the image directly
-docker build -t voting-app -f Dockerfile ..
+# Or build frontend image directly
+docker build -t voting-app -f docker/Dockerfile .
 docker run -p 3000:80 voting-app
 ```
 
-Multi-stage build: Node.js 18 Alpine for build, nginx Alpine for production (~25MB image).
+Multi-stage build: Node.js 22 Alpine for build, nginx Alpine for production.
 
 ---
 

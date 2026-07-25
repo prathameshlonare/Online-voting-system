@@ -12,7 +12,7 @@ services:
       - backend
     networks:
       - frontend-net
-    restart: unless-stopped
+    restart: always
 
   # ==================== BACKEND ====================
   backend:
@@ -35,7 +35,7 @@ services:
     networks:
       - frontend-net
       - backend-net
-    restart: unless-stopped
+    restart: always
 
   # ==================== DYNAMODB LOCAL ====================
   dynamodb:
@@ -51,7 +51,7 @@ services:
       - dynamodb-data:/home/dynamodblocal/data
     networks:
       - backend-net
-    restart: unless-stopped
+    restart: always
 
 networks:
   frontend-net:

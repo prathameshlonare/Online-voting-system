@@ -1,4 +1,15 @@
 node_modules
 build
 .git
+.gitignore
 .env
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+.DS_Store
+coverage
+.nyc_output
+day-*.md
+*.md
+!docker/README.md
