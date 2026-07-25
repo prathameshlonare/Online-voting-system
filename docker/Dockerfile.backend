@@ -6,7 +6,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy mock source files directly
-COPY src/mocks/ ./src/mocks/
+COPY frontend/src/mocks/ ./src/mocks/
 
 # Copy HTTP server wrapper
 COPY docker/server.js ./server.js
