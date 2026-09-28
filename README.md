@@ -2,7 +2,7 @@
 
 # Online Voting System
 
-Serverless voting platform on AWS for live college elections — OTP auth, animated results, admin controls.
+Serverless voting platform on AWS for college elections: OTP auth, animated results, admin controls.
 
 [![License](https://img.shields.io/github/license/prathameshlonare/Online-voting-system?style=for-the-badge)](https://github.com/prathameshlonare/Online-voting-system/blob/main/LICENSE.txt)
 [![Build](https://img.shields.io/github/actions/workflow/status/prathameshlonare/Online-voting-system/ci.yml?style=for-the-badge)](https://github.com/prathameshlonare/Online-voting-system/actions)
@@ -18,7 +18,7 @@ Serverless voting platform on AWS for live college elections — OTP auth, anima
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
-- [Documentation](#documentation)
+- [DevOps Engineering & Documentation](#devops-engineering--documentation)
 - [Features](#features)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Screenshots](#screenshots)
@@ -29,9 +29,9 @@ Serverless voting platform on AWS for live college elections — OTP auth, anima
 
 ## What is this?
 
-A React + Python Lambda voting app backed by DynamoDB, Cognito, and API Gateway, with Terraform + CloudFormation for reproducible deploys. It ran a real departmental election for 500+ students. Frontend runs in mock mode with no backend for demo.
+A React single page application backed by Python AWS Lambda functions, DynamoDB, Cognito, and API Gateway, automated with Terraform and Docker. Built for college departmental elections with student eligibility validated against attendance records. Includes a full offline mock mode for local development and demonstration without cloud dependencies.
 
-> **Live Demo:** https://prathameshlonare.me/voting/ — no setup needed, runs with mock data.
+> **Live Demo:** https://prathameshlonare.me/voting/ (runs with client-side mock data, no AWS setup needed).
 >
 > **Demo logins (1-click fill on login page):**
 > | Role | Email | Password |
@@ -41,42 +41,35 @@ A React + Python Lambda voting app backed by DynamoDB, Cognito, and API Gateway,
 
 ## Why?
 
-Our department voted the old way: mark your pick's initials for President and Secretary on a chit, drop it in a box, count everything by hand. We replaced that with this system and ran a real departmental election on it — 500+ students, eligibility checked against the attendance CSV the admin uploads. The first version is just frontend + backend wired up manually in the AWS console.
+Our college department previously voted by writing candidate initials for President and Secretary on paper chits, dropping them into a ballot box, and tallying counts by hand. We replaced that process with this serverless platform, validating voter eligibility against attendance CSV records uploaded by the election administrator.
 
 ## Quick Start
 
 ```bash
-# Clone
+# Clone repository
 git clone https://github.com/prathameshlonare/Online-voting-system.git
 cd Online-voting-system
 
-# Demo frontend only (no backend / AWS needed)
+# Demo frontend locally (offline mock mode, no backend needed)
 cd frontend
 yarn install
 yarn start
-# open http://localhost:3000
+# Open http://localhost:3000
 ```
 
 ```bash
-# Full local stack (recommended)
+# Run local container stack
 cd docker
-docker compose up -d
-# app: http://localhost:3000
+docker compose up --build
+# Open http://localhost:3000
 ```
 
 ```bash
-# Frontend with real backend
-cd frontend
-REACT_APP_API_URL=http://localhost:4000 yarn start
-```
-
-```bash
-# Deploy to AWS (test-only: plan first, apply → verify → destroy same session)
+# Infrastructure verification (Plan-only / Test-only)
 cd infra/terraform
-terraform init && terraform plan
-
-cd ../cloudformation
-sam build && sam deploy --guided
+terraform init
+terraform validate
+terraform plan
 ```
 
 ## Architecture
@@ -89,7 +82,7 @@ graph LR
     API --> Vote[Lambda: submitVote]
     API --> Cand[Lambda: getCandidates]
     API --> Elig[Lambda: checkEligibility]
-    Vote --> DB[(DynamoDB - 5 tables)]
+    Vote --> DB[(DynamoDB: 5 tables)]
     Cand --> DB
     Elig --> DB
     Client --> Auth[Cognito JWT + OTP]
@@ -97,111 +90,112 @@ graph LR
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18, Material UI, React Router v6 |
-| Backend | Python 3.9 Lambda, API Gateway REST |
-| Auth | Amazon Cognito (JWT, OTP verification) |
-| Database | DynamoDB (5 tables, PAY_PER_REQUEST) |
-| Storage | S3 (React app + attendance CSV) |
-| IaC | Terraform (VPC/IAM) + CloudFormation (app stacks) |
-| CI/CD | GitHub Actions (lint, test, Bandit, deploy) |
-| Container | Docker multi-stage (Node → nginx, 25MB) |
-| Monitoring | CloudWatch Dashboard + Alarms |
+| Layer | Technology | Purpose |
+|:---|:---|:---|
+| **Frontend** | React 18, Material UI, React Router v6 | Single page voter and admin interface |
+| **Backend** | Python 3.9, AWS Lambda, API Gateway REST | 12 serverless micro-handlers |
+| **Authentication** | Amazon Cognito User Pool | Voter registration, OTP verification, JWT auth |
+| **Database** | Amazon DynamoDB (5 tables) | On-demand storage for votes, candidates, users |
+| **Storage** | Amazon S3 | Frontend static hosting and student CSV uploads |
+| **Infrastructure as Code** | Terraform | Declarative infrastructure definition and management |
+| **Containerization** | Docker, Docker Compose | Multi-stage build (Node -> Nginx Alpine) for local testing |
+| **CI/CD** | GitHub Actions | Automated linting, unit tests, container build, Trivy scan |
+| **Local Orchestration** | Kubernetes on kind | Declarative Deployments, Services, and Probes |
 
 ## Project Structure
 
-```
+```text
 Online-voting-system/
 ├── backend/
-├── docker/
-├── frontend/
+│   └── lambda/            # 12 Python Lambda microservices (submitVote, checkEligibility, ...)
+├── docker/                # Docker compose and local mock configurations
+├── docs/                  # Engineering evidence, baseline, troubleshooting, and metrics
+│   └── baseline.md        # Architectural audit and college baseline demarcation
+├── frontend/              # React 18 single page application source code
 ├── infra/
-├── screenshots/
+│   └── terraform/         # Declarative AWS infrastructure (DynamoDB, Cognito, IAM, Lambda)
+├── k8s/                   # Native Kubernetes manifests (Deployment, Service, ConfigMap)
+├── screenshots/           # Application screenshots and architecture diagrams
 ├── .github/
-├── LICENSE.txt
-├── README.md
-├── DEVOPS-PLAN.md
-├── DevOps_Learning_and_Project_Transformation_Plan.md
+│   └── workflows/         # GitHub Actions CI/CD workflows
+├── DEVOPS-PLAN.md         # Single source of truth for DevOps transformation gates
+├── LICENSE.txt            # MIT License
+└── README.md
 ```
 
-See folder READMEs for details. Backend has 12 Lambda handlers (`submitVote.py`, `checkEligibility.py`, `getCandidate.py`, etc.). Frontend has 15 components + mock API layer.
+## DevOps Engineering & Documentation
 
-## Documentation
+Every DevOps enhancement in this repository follows strict engineering verification. No unmeasured performance metrics or inflated numbers are included.
 
-| Resource | Description |
-|----------|-------------|
-| [frontend/README.md](frontend/README.md) | React app, mock/HTTP modes, components |
-| [backend/README.md](backend/README.md) | Lambda handlers and API |
-| [infra/README.md](infra/README.md) | Terraform + CloudFormation stacks |
-| [docker/README.md](docker/README.md) | Compose, multi-stage build, nginx |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Lint, test (34 Jest), Bandit, build |
-| [LICENSE.txt](LICENSE.txt) | MIT license |
+| Document | Purpose |
+|:---|:---|
+| [DEVOPS-PLAN.md](DEVOPS-PLAN.md) | Single source of truth: 6 transformation gates and definition of done |
+| [docs/baseline.md](docs/baseline.md) | Architectural audit separating college core from new DevOps layer |
+| [docs/METRICS.md](docs/METRICS.md) | Verified metrics ledger (commit SHA, command, recorded measurement) |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Real engineering incident root cause analyses (RCA) |
 
 ## Features
 
 ### Voters
-- Email/password registration with OTP confirmation
-- Multi-step flow (Login → OTP → Select → Confirm → Submit)
-- Real-time election status indicator
-- Animated results with confetti
+- Student registration with email and OTP confirmation.
+- Step-by-step voting wizard (Login -> Verification -> Select Candidate -> Confirm -> Submit).
+- Real-time election status indicator (Pending, Live, Closed, Declared).
+- Animated result visualization with celebratory indicators.
 
 ### Administrators
-- Start/stop elections, declare results, reset cycle
-- Manage candidates (add/remove)
-- Upload student attendance CSV
+- Lifecycle controls: Start election, freeze voting, declare results, and reset cycle.
+- Candidate roster management (add and review contesting candidates).
+- Student attendance master CSV upload for eligibility gating.
 
-### DevOps
-- IaC (Terraform + CloudFormation SAM)
-- CI/CD with GitHub Actions
-- Docker multi-stage builds, isolated networks, persisted DynamoDB volume
-- CloudWatch dashboard + alarms
+### DevOps & Reliability
+- Zero-cost test-only infrastructure management with Terraform.
+- Multi-stage Docker image packaging for minimal attack surface.
+- Uncheated CI pipeline with automated unit testing and container vulnerability scanning.
+- Local Kubernetes deployment manifests verified on kind with self-healing probes.
 
 ## CI/CD Pipeline
 
-```yaml
-# .github/workflows/ci.yml
-1. Lint (ESLint)
-2. Test (Jest + coverage)
-3. Security (Bandit + npm audit)
-4. Build (React bundle)
+```text
+Push / Pull Request
+        │
+        ▼
+1. Dependency Installation (cached via yarn.lock)
+        │
+        ▼
+2. Code Linting & Static Checks
+        │
+        ▼
+3. Unit Test Suite (Jest test execution)
+        │
+        ▼
+4. Docker Multi-Stage Build
+        │
+        ▼
+5. Container Security Scan (Trivy CRITICAL/HIGH CVE check)
 ```
-
-Live demo is statically hosted on portfolio (no auto-deploy from this repo).
-
-> DevOps numbers (image size, pipeline duration, load/latency) are being rebuilt from scratch per `DEVOPS-PLAN.md` and will be recorded in `docs/METRICS.md` — nothing claimed until measured.
 
 ## Screenshots
 
 | Screen | Preview |
-|--------|---------|
-| **Login** - voter / admin entry with 1-click demo fill | <img src="screenshots/voting%20app%20photos/login_page.jpeg" width="400" alt="Login Page" /> |
-| **Sign Up** - registration with student ID + OTP step | <img src="screenshots/voting%20app%20photos/sign_up.jpeg" width="400" alt="Sign Up" /> |
-| **Welcome** - landing page with election info | <img src="screenshots/voting%20app%20photos/welcome_page.jpeg" width="400" alt="Welcome Page" /> |
-| **Vote Form** - ballot for President + Secretary | <img src="screenshots/voting%20app%20photos/vote_form.jpeg" width="400" alt="Vote Form" /> |
-| **Election Control** - admin start / stop / declare | <img src="screenshots/voting%20app%20photos/election_control.jpeg" width="400" alt="Election Control" /> |
-| **Add Candidate** - admin candidate management | <img src="screenshots/voting%20app%20photos/add_candidate.jpeg" width="400" alt="Add Candidate" /> |
-| **Vote Result** - confirmation after submit | <img src="screenshots/voting%20app%20photos/vote_result.jpeg" width="400" alt="Vote Result" /> |
-| **Results** - animated counts with celebration | <img src="screenshots/voting%20app%20photos/results.jpeg" width="400" alt="Results" /> |
+|---|---|
+| **Login** (Voter / Admin entry) | <img src="screenshots/voting%20app%20photos/login_page.jpeg" width="380" alt="Login Page" /> |
+| **Sign Up** (Registration + OTP step) | <img src="screenshots/voting%20app%20photos/sign_up.jpeg" width="380" alt="Sign Up" /> |
+| **Welcome** (Landing page with election status) | <img src="screenshots/voting%20app%20photos/welcome_page.jpeg" width="380" alt="Welcome Page" /> |
+| **Vote Form** (Ballot for President and Secretary) | <img src="screenshots/voting%20app%20photos/vote_form.jpeg" width="380" alt="Vote Form" /> |
+| **Election Control** (Admin controls: start, stop, declare) | <img src="screenshots/voting%20app%20photos/election_control.jpeg" width="380" alt="Election Control" /> |
+| **Add Candidate** (Admin candidate configuration) | <img src="screenshots/voting%20app%20photos/add_candidate.jpeg" width="380" alt="Add Candidate" /> |
+| **Vote Confirmation** (Receipt screen after submission) | <img src="screenshots/voting%20app%20photos/vote_result.jpeg" width="380" alt="Vote Result" /> |
+| **Results** (Election outcome visualization) | <img src="screenshots/voting%20app%20photos/results.jpeg" width="380" alt="Results" /> |
 
 ## Contributing
 
-PRs welcome. Run lint + tests before pushing:
+Pull Requests are welcome. Run tests before submitting:
 
 ```bash
 cd frontend
 yarn install
-npx eslint src/ --ext .js,.jsx
-yarn test -- --watchAll=false
+yarn test --watchAll=false
 ```
-
-<a href="https://github.com/prathameshlonare/Online-voting-system/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=prathameshlonare/Online-voting-system" />
-</a>
-
-## Connect
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Prathamesh_Lonare-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/prathamesh-lonare21/)
 
 ## Team
 
@@ -210,18 +204,8 @@ yarn test -- --watchAll=false
 - [GitHub](https://github.com/prathameshlonare)
 - [Portfolio](https://prathameshlonare.me)
 
-**Contributors:** Swapnil Kumbhare, Mohak Talodhikar, Suyog Madavi — departmental election project team.
+**College Project Contributors:** Swapnil Kumbhare, Mohak Talodhikar, Suyog Madavi (departmental election application team).
 
 ## License
 
-MIT License — see [LICENSE.txt](LICENSE.txt)
-
----
-
-<div align="center">
-
-**Try the [live demo](https://prathameshlonare.me/voting/) — Star the repo if it's useful — PRs welcome!**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=prathameshlonare/Online-voting-system&type=Date)](https://star-history.com/#prathameshlonare/Online-voting-system&Date)
-
-</div>
+MIT License. See [LICENSE.txt](LICENSE.txt) for details.
